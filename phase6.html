@@ -1,0 +1,2597 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thirteen - Act 6: Yorktown</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+    background:#000;
+    overflow:hidden;
+    font-family:'VT323',monospace;
+    color:#fff
+}
+
+#gameContainer{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center
+}
+
+canvas#gameCanvas{
+    background:#111;
+    image-rendering:pixelated;
+    box-shadow:0 0 50px #000
+}
+
+#vignette{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:radial-gradient(
+        circle,
+        rgba(0,0,0,0) 50%,
+        rgba(26,15,10,.8) 100%
+    );
+    box-shadow:inset 0 0 100px #000;
+    z-index:10
+}
+
+#dialogueBox{
+    position:absolute;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    width:90%;
+    max-width:800px;
+    height:160px;
+    background:#000;
+    border:4px solid #fff;
+    border-radius:10px;
+    padding:20px;
+    display:none;
+    z-index:20
+}
+
+#dialogueBox.active{
+    display:flex;
+    align-items:flex-start;
+    gap:20px
+}
+
+#speakerPortrait{
+    width:100px;
+    height:100px;
+    border:2px solid #555;
+    background:#222;
+    image-rendering:pixelated
+}
+
+#textContainer{
+    flex:1;
+    display:flex;
+    flex-direction:column
+}
+
+#speakerName{
+    font-size:24px;
+    color:#f4c89a;
+    margin-bottom:10px;
+    text-transform:uppercase;
+    letter-spacing:2px
+}
+
+#dialogueText{
+    font-size:28px;
+    line-height:1.1;
+    color:#fff;
+    white-space:pre-wrap
+}
+
+#dialogueText.nar{
+    font-style:italic;
+    color:#aaa
+}
+
+#continueIndicator{
+    position:absolute;
+    bottom:10px;
+    right:20px;
+    font-size:24px;
+    animation:bounce .5s infinite alternate;
+    display:none
+}
+
+@keyframes bounce{
+    from{transform:translateY(0)}
+    to{transform:translateY(5px)}
+}
+
+#interactionHUD{
+    position:absolute;
+    top:20px;
+    right:20px;
+    font-size:20px;
+    background:#000;
+    border:2px solid #fff;
+    padding:10px;
+    display:none;
+    z-index:15
+}
+
+#battleHUD{
+    position:absolute;
+    top:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#000;
+    border:3px solid #fff;
+    padding:8px 18px;
+    font-size:24px;
+    display:none;
+    z-index:15;
+    text-align:center
+}
+
+#hearts{
+    color:#e33;
+    letter-spacing:4px;
+    font-size:26px
+}
+
+#weaponText{
+    color:#d4a574;
+    font-size:20px
+}
+
+#controls{
+    position:absolute;
+    bottom:20px;
+    left:20px;
+    background:#000;
+    border:2px solid #fff;
+    padding:8px 12px;
+    font-size:18px;
+    display:none;
+    z-index:15
+}
+
+#flash{
+    position:absolute;
+    inset:0;
+    background:#fff;
+    opacity:0;
+    pointer-events:none;
+    z-index:30
+}
+
+#fadeToBlack{
+    position:absolute;
+    inset:0;
+    background:#000;
+    opacity:0;
+    pointer-events:none;
+    z-index:40;
+    transition:opacity 2s ease
+}
+
+#loadingNextPhase{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    font-size:32px;
+    color:#d4a574;
+    text-align:center;
+    display:none;
+    z-index:50
+}
+</style>
+</head>
+
+<body>
+
+<div id="gameContainer">
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="vignette"></div>
+
+<div id="interactionHUD">
+    Press <b>E</b> to talk
+</div>
+
+<div id="battleHUD">
+    <div id="hearts">♥ ♥ ♥</div>
+    <div id="weaponText">MUSKET</div>
+    <div id="enemyCount">ENEMIES: 0</div>
+</div>
+
+<div id="controls">
+    WASD / ARROWS — MOVE<br>
+    SPACE — FIRE
+</div>
+
+<div id="dialogueBox">
+
+    <canvas id="speakerPortrait" width="64" height="64"></canvas>
+
+    <div id="textContainer">
+        <div id="speakerName"></div>
+        <div id="dialogueText"></div>
+    </div>
+
+    <div id="continueIndicator">▼</div>
+
+</div>
+
+<div id="flash"></div>
+
+<div id="fadeToBlack"></div>
+
+<div id="loadingNextPhase">
+    <h1>ACT 6: COMPLETE</h1>
+    <p>Loading Act 7...</p>
+</div>
+
+</div>
+
+
+<script>
+
+const $=id=>document.getElementById(id);
+
+const cv=$('gameCanvas');
+const ctx=cv.getContext('2d');
+
+const VW=800;
+const VH=600;
+
+const MW=1800;
+const MH=1200;
+
+cv.width=VW;
+cv.height=VH;
+
+function fit(){
+    const s=Math.min(innerWidth/VW,innerHeight/VH);
+    cv.style.width=VW*s+'px';
+    cv.style.height=VH*s+'px'
+}
+
+addEventListener('resize',fit);
+fit();
+
+
+/* =========================================================
+   WORLD
+========================================================= */
+
+const SOLIDS=[
+    [-50,-50,MW+100,250],
+    [-50,900,MW+100,400],
+    [-50,-50,50,MH+100],
+    [MW,-50,50,MH+100],
+
+    [400,430,180,60],
+    [760,390,120,80],
+    [1080,300,180,70],
+    [1390,410,180,80],
+    [300,690,180,60],
+    [900,700,160,50]
+];
+
+function blocked(x,y){
+
+    const a=x+14;
+    const b=y+42;
+
+    for(const s of SOLIDS){
+
+        if(
+            a<s[0]+s[2] &&
+            a+20>s[0] &&
+            b<s[1]+s[3] &&
+            b+6>s[1]
+        ) return true;
+
+    }
+
+    return false;
+}
+
+
+/* =========================================================
+   AUDIO — SOLO SFX
+========================================================= */
+
+let audioOn=true;
+
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+
+const nb=AC.createBuffer(
+    1,
+    AC.sampleRate,
+    AC.sampleRate
+);
+
+{
+    const d=nb.getChannelData(0);
+
+    for(let i=0;i<d.length;i++)
+        d[i]=Math.random()*2-1;
+}
+
+function wake(){
+    AC.resume()
+}
+
+addEventListener('click',wake);
+
+function noise(dur,vol,fq,type='lowpass'){
+
+    if(!audioOn||AC.state!=='running')return;
+
+    const s=AC.createBufferSource();
+    s.buffer=nb;
+
+    const f=AC.createBiquadFilter();
+    f.type=type;
+    f.frequency.value=fq;
+
+    const g=AC.createGain();
+    const n=AC.currentTime;
+
+    g.gain.setValueAtTime(vol,n);
+    g.gain.exponentialRampToValueAtTime(.001,n+dur);
+
+    s.connect(f);
+    f.connect(g);
+    g.connect(AC.destination);
+
+    s.start(n);
+    s.stop(n+dur)
+}
+
+function sfx(k){
+
+    if(!audioOn||AC.state!=='running')return;
+
+    if(k==='blip'){
+
+        const o=AC.createOscillator();
+        const g=AC.createGain();
+        const n=AC.currentTime;
+
+        o.type='square';
+        o.frequency.value=380+Math.random()*80;
+
+        g.gain.setValueAtTime(.04,n);
+        g.gain.exponentialRampToValueAtTime(.001,n+.05);
+
+        o.connect(g);
+        g.connect(AC.destination);
+
+        o.start(n);
+        o.stop(n+.05)
+
+    }
+
+    else if(k==='shot'){
+        noise(.35,.55,1800+Math.random()*900)
+    }
+
+    else if(k==='hit'){
+        noise(.15,.25,700,'bandpass')
+    }
+
+    else if(k==='boom'){
+        noise(.7,.5,250)
+    }
+}
+
+
+/* =========================================================
+   CHARACTER LOOKS
+========================================================= */
+
+const SK='#f6eee2';
+
+const LOOK={
+
+    player:{
+        skin:SK,
+        hair:'#111',
+        coat:'#2b63c9',
+        deco:'rainbow',
+        pants:'#1a1a1a'
+    },
+
+    washington:{
+        skin:SK,
+        hair:'#d8d0c0',
+        coat:'#233b70',
+        deco:'gold',
+        pants:'#222',
+        hat:'band',
+        hc:'#222'
+    },
+
+    french:{
+        skin:SK,
+        hair:'#5b3820',
+        coat:'#47733c',
+        deco:'gold',
+        pants:'#222',
+        hat:'band',
+        hc:'#31522d'
+    },
+
+    american:{
+        skin:SK,
+        hair:'#222',
+        coat:'#8d3434',
+        deco:'xbelt',
+        pants:'#222',
+        musket:1
+    },
+
+    british:{
+        skin:SK,
+        hair:'#111',
+        coat:'#c62828',
+        deco:'xbelt',
+        pants:'#171717',
+        musket:1
+    },
+
+    officer:{
+        skin:SK,
+        hair:'#222',
+        coat:'#7c2630',
+        deco:'gold',
+        pants:'#222',
+        hat:'band',
+        hc:'#222',
+        musket:1
+    }
+
+};
+
+
+/* =========================================================
+   PIXEL PERSON
+========================================================= */
+
+function drawPerson(c,fx,fy,o,face,t,s,x){
+
+    c.save();
+
+    c.translate(fx,fy);
+    c.scale(s,s);
+
+    c.fillStyle='rgba(0,0,0,.35)';
+    c.beginPath();
+    c.ellipse(
+        0,
+        0,
+        x.fallen?28:12,
+        4,
+        0,0,7
+    );
+    c.fill();
+
+    if(x.fallen)
+        c.rotate((x.fdir||1)*Math.PI/2);
+
+    const side=
+        face==='left'||
+        face==='right';
+
+    const dr=
+        face==='left'?-1:1;
+
+    const back=face==='up';
+
+    const R=(a,b,w,h,col)=>{
+
+        c.fillStyle='#111';
+        c.fillRect(
+            a-1.5,
+            b-1.5,
+            w+3,
+            h+3
+        );
+
+        c.fillStyle=col;
+        c.fillRect(a,b,w,h)
+    };
+
+    const m=x.moving&&!x.fallen;
+    const sw=m?Math.sin(t)*3:0;
+
+    const tw=side?12:18;
+    const cx=-tw/2;
+
+    const ex=x.ex||'neutral';
+
+
+    /* LEGS */
+
+    if(!o.dress){
+
+        const pc=o.pants||'#222';
+
+        if(side){
+
+            for(const k of[1,-1])
+                R(
+                    -3+k*sw*1.2,
+                    -9,
+                    6,
+                    9,
+                    pc
+                )
+
+        }else{
+
+            R(
+                -7,
+                -9+sw*.3,
+                5,
+                9-sw*.3,
+                pc
+            );
+
+            R(
+                2,
+                -9-sw*.3,
+                5,
+                9+sw*.3,
+                pc
+            )
+        }
+    }
+
+
+    /* BODY */
+
+    R(
+        cx,
+        -24,
+        tw,
+        15,
+        o.coat
+    );
+
+
+    /* DECORATION */
+
+    if(!back){
+
+        if(o.deco==='rainbow'&&!side){
+
+            c.fillStyle='#2ecc71';
+            c.fillRect(-3,-23,2,13);
+
+            c.fillStyle='#f1c40f';
+            c.fillRect(-1,-23,2,13);
+
+            c.fillStyle='#e74c3c';
+            c.fillRect(1,-23,2,13)
+        }
+
+        else if(o.deco==='gold'){
+
+            c.fillStyle='#e6c65c';
+            c.fillRect(cx+2,-23,tw-4,3);
+
+            c.fillRect(cx+3,-16,tw-6,2)
+        }
+
+        else if(o.deco==='xbelt'){
+
+            c.strokeStyle='#eee';
+            c.lineWidth=2.5;
+
+            c.beginPath();
+
+            c.moveTo(cx+1,-23);
+            c.lineTo(-cx-1,-10);
+
+            if(!side){
+
+                c.moveTo(-cx-1,-23);
+                c.lineTo(cx+1,-10)
+            }
+
+            c.stroke()
+        }
+    }
+
+
+    /* ARMS */
+
+    const as=m?Math.sin(t)*2:0;
+
+    if(side){
+
+        R(
+            -2-sw,
+            -23,
+            4,
+            10,
+            o.coat
+        )
+
+    }else{
+
+        R(
+            cx-5,
+            -23+as,
+            4,
+            10,
+            o.coat
+        );
+
+        R(
+            -cx+1,
+            -23-as,
+            4,
+            10,
+            o.coat
+        )
+    }
+
+
+    /* HEAD */
+
+    const hy=-50;
+    const hw=side?26:28;
+    const hx0=-hw/2;
+
+    R(
+        hx0,
+        hy,
+        hw,
+        26,
+        o.skin
+    );
+
+    c.fillStyle=o.hair;
+
+    if(back){
+
+        c.fillRect(
+            hx0,
+            hy,
+            hw,
+            24
+        )
+
+    }else if(side){
+
+        c.fillRect(
+            hx0,
+            hy,
+            hw,
+            9
+        );
+
+        c.fillRect(
+            dr>0?hx0:hx0+hw-13,
+            hy+9,
+            13,
+            12
+        )
+
+    }else{
+
+        c.fillRect(
+            hx0,
+            hy,
+            hw,
+            9
+        );
+
+        c.fillRect(
+            hx0,
+            hy+9,
+            5,
+            9
+        );
+
+        c.fillRect(
+            hx0+hw-5,
+            hy+9,
+            5,
+            9
+        )
+    }
+
+
+    /* FACE */
+
+    if(!back){
+
+        const xs=side?[dr*6]:[-6,6];
+
+        for(const e0 of xs){
+
+            c.fillStyle='#111';
+
+            c.fillRect(
+                e0-2,
+                -38,
+                4,
+                5
+            )
+        }
+
+        c.fillRect(
+            side?dr*7-2:-2,
+            -30,
+            4,
+            2
+        )
+    }
+
+
+    /* HAT */
+
+    if(o.hat==='band'){
+
+        c.fillStyle=o.hc;
+        c.fillRect(
+            hx0,
+            -45,
+            hw,
+            5
+        )
+    }
+
+
+    /* MUSKET */
+
+    if(o.musket){
+
+        const a=x.aim??-Math.PI/2;
+
+        c.save();
+
+        c.translate(dr*5,-16);
+        c.rotate(a);
+
+        c.fillStyle='#111';
+        c.fillRect(
+            -9,-2.5,
+            44,5
+        );
+
+        c.fillStyle='#7a4a22';
+        c.fillRect(
+            -8,-1.5,
+            24,3
+        );
+
+        c.fillStyle='#777';
+        c.fillRect(
+            16,-1,
+            18,2
+        );
+
+        c.fillStyle='#ddd';
+        c.fillRect(
+            35,-.6,
+            7,1.2
+        );
+
+        c.restore()
+    }
+
+    c.restore()
+}
+
+
+/* =========================================================
+   ENTITY SYSTEM
+========================================================= */
+
+let E=[];
+let bullets=[];
+let particles=[];
+
+let time=0;
+let screenShake=0;
+
+let state='scene';
+
+let player;
+
+let near=null;
+
+let battleEnemies=[];
+
+let hearts=3;
+
+let kills=0;
+
+
+class Ent{
+
+    constructor(x,y,k,o={}){
+
+        Object.assign(
+            this,
+            {
+                x,
+                y,
+                k,
+                o:LOOK[k],
+
+                face:'down',
+                t:Math.random()*6,
+
+                moving:false,
+                speed:.9,
+
+                timer:40+Math.random()*100|0,
+
+                zone:null,
+
+                fallen:false,
+
+                lines:[],
+                barks:[],
+
+                bark:null,
+                barkL:0,
+                barkT:300,
+
+                tx:null,
+                ty:null,
+
+                ctrl:false,
+                free:false,
+
+                talking:false,
+
+                hp:1
+            },
+            o
+        )
+    }
+
+
+    mv(tx,ty,sp){
+
+        const dx=tx-this.x;
+        const dy=ty-this.y;
+
+        const d=Math.hypot(dx,dy);
+
+        if(d<=sp){
+
+            this.tx=null;
+            this.moving=false;
+
+            return true
+        }
+
+        const vx=dx/d*sp;
+        const vy=dy/d*sp;
+
+        if(
+            this.free ||
+            !blocked(this.x+vx,this.y)
+        )
+            this.x+=vx;
+
+        if(
+            this.free ||
+            !blocked(this.x,this.y+vy)
+        )
+            this.y+=vy;
+
+        this.moving=true;
+
+        this.t+=.2;
+
+        if(Math.abs(vx)>Math.abs(vy))
+            this.face=vx>0?'right':'left';
+        else
+            this.face=vy>0?'down':'up';
+
+        return false
+    }
+
+
+    update(){
+
+        if(this.fallen)
+            return;
+
+        if(this.ctrl){
+
+            if(this.tx!=null)
+                this.mv(
+                    this.tx,
+                    this.ty,
+                    this.run||this.speed
+                );
+
+            return
+        }
+
+        if(!this.zone)
+            return;
+
+        if(this.tx==null){
+
+            if(--this.timer<=0){
+
+                const z=this.zone;
+
+                this.tx=
+                    z[0]+Math.random()*z[2];
+
+                this.ty=
+                    z[1]+Math.random()*z[3];
+
+                this.timer=
+                    80+Math.random()*180|0
+            }
+
+        }else{
+
+            this.mv(
+                this.tx,
+                this.ty,
+                this.speed
+            )
+        }
+    }
+
+
+    draw(c){
+
+        this.ex=
+            this.fallen?
+            'pain':
+            this.expr||'neutral';
+
+        drawPerson(
+            c,
+            this.x+24,
+            this.y+48,
+            this.o,
+            this.face,
+            this.t,
+            this.o.scale||1,
+            this
+        )
+    }
+}
+
+
+function mk(name,x,y,k,o={}){
+
+    const e=new Ent(
+        x,
+        y,
+        k,
+        Object.assign({name},o)
+    );
+
+    E.push(e);
+
+    return e
+}
+
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+const bgc=document.createElement('canvas');
+
+bgc.width=MW;
+bgc.height=MH;
+
+function buildBG(){
+
+    const b=bgc.getContext('2d');
+
+    /* SKY */
+
+    const sky=b.createLinearGradient(
+        0,0,0,500
+    );
+
+    sky.addColorStop(0,'#172b45');
+    sky.addColorStop(1,'#6e7c83');
+
+    b.fillStyle=sky;
+    b.fillRect(0,0,MW,900);
+
+
+    /* DISTANT TREES */
+
+    for(let x=0;x<MW;x+=35){
+
+        const h=60+Math.random()*80;
+
+        b.fillStyle='#24372c';
+
+        b.fillRect(
+            x,
+            250-h,
+            35,
+            h
+        )
+    }
+
+
+    /* GROUND */
+
+    b.fillStyle='#66513a';
+    b.fillRect(
+        0,
+        300,
+        MW,
+        600
+    );
+
+
+    /* ROAD */
+
+    b.fillStyle='#806846';
+
+    b.fillRect(
+        0,
+        560,
+        MW,
+        170
+    );
+
+
+    for(let y=570;y<720;y+=18){
+
+        b.fillStyle='rgba(255,220,170,.08)';
+
+        b.fillRect(
+            0,
+            y,
+            MW,
+            4
+        )
+    }
+
+
+    /* FARMHOUSE */
+
+    b.fillStyle='#70482d';
+
+    b.fillRect(
+        410,
+        350,
+        190,
+        150
+    );
+
+    b.fillStyle='#4a291c';
+
+    b.fillRect(
+        390,
+        330,
+        230,
+        35
+    );
+
+    b.fillStyle='#241812';
+
+    b.fillRect(
+        480,
+        420,
+        50,
+        80
+    );
+
+    for(const x of[430,540]){
+
+        b.fillStyle='#9bb4b8';
+
+        b.fillRect(
+            x,
+            390,
+            38,
+            35
+        )
+    }
+
+
+    /* BARN */
+
+    b.fillStyle='#71352c';
+
+    b.fillRect(
+        1050,
+        360,
+        230,
+        160
+    );
+
+    b.fillStyle='#42231b';
+
+    b.beginPath();
+
+    b.moveTo(1020,360);
+    b.lineTo(1165,290);
+    b.lineTo(1310,360);
+    b.closePath();
+
+    b.fill();
+
+
+    /* FENCES */
+
+    for(let x=50;x<1700;x+=70){
+
+        b.fillStyle='#3c291c';
+
+        b.fillRect(
+            x,
+            760,
+            8,
+            70
+        );
+
+        b.fillRect(
+            x+35,
+            760,
+            8,
+            70
+        );
+
+        b.fillRect(
+            x,
+            775,
+            43,
+            7
+        );
+
+        b.fillRect(
+            x,
+            805,
+            43,
+            7
+        )
+    }
+
+
+    /* CANNONS */
+
+    for(const [x,y] of[
+        [760,530],
+        [1320,540],
+        [1450,650]
+    ]){
+
+        b.fillStyle='#111';
+
+        b.beginPath();
+
+        b.ellipse(
+            x+20,
+            y+35,
+            30,
+            8,
+            0,0,7
+        );
+
+        b.fill();
+
+        b.fillStyle='#555';
+
+        b.fillRect(
+            x,
+            y,
+            55,
+            22
+        );
+
+        b.fillStyle='#222';
+
+        b.fillRect(
+            x+40,
+            y+7,
+            45,
+            9
+        )
+    }
+
+
+    /* TREES */
+
+    for(const [x,y] of[
+        [160,380],
+        [700,300],
+        [930,420],
+        [1500,300],
+        [1650,420]
+    ]){
+
+        b.fillStyle='#3a281b';
+
+        b.fillRect(
+            x,
+            y,
+            25,
+            130
+        );
+
+        b.fillStyle='#263d27';
+
+        b.beginPath();
+
+        b.arc(
+            x+12,
+            y,
+            65,
+            0,
+            7
+        );
+
+        b.fill()
+    }
+
+
+    /* SMALL ROCKS */
+
+    for(let i=0;i<80;i++){
+
+        const x=Math.random()*MW;
+        const y=300+Math.random()*500;
+
+        b.fillStyle='rgba(40,30,20,.4)';
+
+        b.fillRect(
+            x,
+            y,
+            5+Math.random()*10,
+            3+Math.random()*6
+        )
+    }
+}
+
+buildBG();
+
+
+/* =========================================================
+   PARTICLES
+========================================================= */
+
+function puff(x,y){
+
+    for(let i=0;i<8;i++){
+
+        particles.push({
+
+            x,
+            y,
+
+            vx:(Math.random()-.5)*3,
+            vy:-Math.random()*2,
+
+            l:30,
+            m:30,
+
+            r:3+Math.random()*3,
+
+            c:'#b59d78'
+        })
+    }
+}
+
+
+/* =========================================================
+   BULLETS
+========================================================= */
+
+function fire(shooter,target){
+
+    const fx=shooter.x+24;
+    const fy=shooter.y+30;
+
+    let tx,ty;
+
+    if(target){
+
+        tx=target.x+24;
+        ty=target.y+25
+
+    }else{
+
+        const a=
+            shooter.face==='left'?
+            Math.PI:
+            0;
+
+        tx=fx+Math.cos(a)*600;
+        ty=fy
+    }
+
+    const angle=Math.atan2(
+        ty-fy,
+        tx-fx
+    );
+
+    shooter.aim=angle;
+
+    const muzzleX=
+        fx+Math.cos(angle)*35;
+
+    const muzzleY=
+        fy+Math.sin(angle)*35;
+
+    particles.push({
+        x:muzzleX,
+        y:muzzleY,
+        vx:0,
+        vy:0,
+        l:5,
+        m:5,
+        r:10,
+        c:'#ffd27a'
+    });
+
+    bullets.push({
+
+        x:muzzleX,
+        y:muzzleY,
+
+        vx:Math.cos(angle)*18,
+        vy:Math.sin(angle)*18,
+
+        owner:shooter,
+
+        target,
+
+        life:80
+    });
+
+    sfx('shot');
+
+    screenShake=7
+}
+
+
+/* =========================================================
+   DIALOGUE
+========================================================= */
+
+let D=null;
+let typeT=null;
+
+const box=$('dialogueBox');
+const nameEl=$('speakerName');
+const txt=$('dialogueText');
+const cont=$('continueIndicator');
+
+const por=$('speakerPortrait');
+const pC=por.getContext('2d');
+
+
+function drawPort(L,open){
+
+    pC.fillStyle='#2a2118';
+    pC.fillRect(
+        0,0,64,64
+    );
+
+    drawPerson(
+        pC,
+        32,
+        96,
+        L.look,
+        'down',
+        0,
+        1.5,
+        {
+            ex:open?'open':(L.expr||'neutral'),
+            fallen:false
+        }
+    )
+}
+
+
+function say(lines){
+
+    return new Promise(resolve=>{
+
+        D={
+            lines,
+            i:0,
+            resolve,
+            typing:false,
+            ready:false
+        };
+
+        showLine()
+    })
+}
+
+
+function showLine(){
+
+    const L=D.lines[D.i];
+
+    if(L.act)
+        L.act();
+
+    box.classList.add('active');
+
+    cont.style.display='none';
+
+    if(L.sp){
+
+        nameEl.textContent=L.sp;
+
+        por.style.display='block';
+
+        txt.className='';
+
+        drawPort(
+            L,
+            false
+        )
+
+    }else{
+
+        nameEl.textContent='';
+
+        por.style.display='none';
+
+        txt.className='nar'
+    }
+
+    txt.textContent='';
+
+    let n=0;
+
+    D.typing=true;
+    D.ready=false;
+
+    clearInterval(typeT);
+
+    typeT=setInterval(()=>{
+
+        if(n<L.text.length){
+
+            txt.textContent+=L.text[n];
+
+            if(
+                L.sp &&
+                n%3===0
+            )
+                drawPort(
+                    L,
+                    (n/3|0)%2===0
+                );
+
+            if(
+                n%2===0 &&
+                L.text[n]!==' '
+            )
+                sfx('blip');
+
+            n++
+
+        }else{
+
+            done()
+        }
+
+    },28)
+}
+
+
+function done(){
+
+    clearInterval(typeT);
+
+    D.typing=false;
+    D.ready=true;
+
+    const L=D.lines[D.i];
+
+    if(L.sp)
+        drawPort(L,false);
+
+    txt.textContent=L.text;
+
+    cont.style.display='block'
+}
+
+
+function advance(){
+
+    if(!D)return;
+
+    if(D.typing)
+        done();
+
+    else if(D.ready)
+        next()
+}
+
+
+function next(){
+
+    D.i++;
+
+    if(D.i>=D.lines.length){
+
+        box.classList.remove('active');
+
+        const r=D.resolve;
+
+        D=null;
+
+        r()
+
+    }else{
+
+        showLine()
+    }
+}
+
+
+/* =========================================================
+   SCENE 1 — YORKTOWN
+========================================================= */
+
+async function openingScene(){
+
+    await say([
+
+        {
+            text:
+            'Yorktown, Virginia — October 1781.\n' +
+            'The American army and its French allies surround the British position.'
+        },
+
+        {
+            sp:'George Washington',
+            look:LOOK.washington,
+            text:
+            'The British are trapped.\n' +
+            'But they will not surrender without a fight.'
+        },
+
+        {
+            sp:'French Officer',
+            look:LOOK.french,
+            text:
+            'Our guns are ready, General Washington.\n' +
+            'Tonight, Yorktown will feel the full force of the allied army.'
+        },
+
+        {
+            sp:'Washington',
+            look:LOOK.washington,
+            text:
+            'Then we advance.\n' +
+            'Stay close to the lines and keep your musket ready.'
+        },
+
+        {
+            text:
+            'The order is given.\n' +
+            'The final battle of the campaign begins.'
+        }
+
+    ]);
+
+    state='explore';
+
+    $('controls').style.display='block'
+}
+
+
+/* =========================================================
+   TALKING NPCs
+========================================================= */
+
+function talk(n){
+
+    n.talking=true;
+
+    const lines=n.lines||[];
+
+    say(
+        lines.map(text=>({
+            sp:n.name,
+            look:n.o,
+            text
+        }))
+    ).then(()=>{
+
+        n.talking=false;
+
+        if(n.startBattle){
+
+            startBattleScene()
+        }
+    })
+}
+
+
+/* =========================================================
+   BATTLE SCENE
+========================================================= */
+
+async function startBattleScene(){
+
+    state='battleScene';
+
+    $('interactionHUD').style.display='none';
+
+    await say([
+
+        {
+            sp:'American Officer',
+            look:LOOK.officer,
+            text:
+            'There! The British line is breaking!\n' +
+            'Take your position and fire!'
+        },
+
+        {
+            text:
+            'The battlefield erupts in smoke and gunfire.'
+        },
+
+        {
+            text:
+            'SURVIVE THE BATTLE.'
+        }
+
+    ]);
+
+    beginBattle()
+}
+
+
+/* =========================================================
+   BATTLE
+========================================================= */
+
+function beginBattle(){
+
+    state='battle';
+
+    $('battleHUD').style.display='block';
+
+    $('controls').innerHTML=
+        'WASD / ARROWS — MOVE<br>' +
+        'SPACE — FIRE';
+
+    $('controls').style.display='block';
+
+    hearts=3;
+    kills=0;
+
+    battleEnemies=[];
+
+    /* British line */
+
+    const positions=[
+        [1100,450],
+        [1250,500],
+        [1400,440],
+        [1510,550],
+        [1180,650],
+        [1320,690],
+        [1460,720]
+    ];
+
+    positions.forEach((p,i)=>{
+
+        const e=new Ent(
+            p[0],
+            p[1],
+            'british',
+            {
+                name:'British Soldier',
+                ctrl:true,
+                free:true,
+                hp:1,
+                speed:0,
+                face:'left',
+                enemy:true,
+                shootTimer:80+i*35
+            }
+        );
+
+        E.push(e);
+        battleEnemies.push(e)
+    });
+
+    /* American ally */
+
+    for(const p of[
+        [800,470],
+        [820,620]
+    ]){
+
+        mk(
+            'American Soldier',
+            p[0],
+            p[1],
+            'american',
+            {
+                ctrl:true,
+                free:true,
+                ally:true,
+                face:'right',
+                hp:1
+            }
+        )
+    }
+
+    player.x=700;
+    player.y=570;
+
+    player.face='right'
+}
+
+
+/* =========================================================
+   PLAYER DAMAGE
+========================================================= */
+
+function damagePlayer(){
+
+    if(player.invincible)
+        return;
+
+    hearts--;
+
+    player.invincible=true;
+
+    setTimeout(()=>{
+        player.invincible=false
+    },1000);
+
+    $('flash').style.opacity=.7;
+
+    setTimeout(()=>{
+        $('flash').style.opacity=0
+    },100);
+
+    screenShake=14;
+
+    sfx('hit');
+
+    if(hearts<=0){
+
+        battleLost()
+
+    }
+}
+
+
+async function battleLost(){
+
+    state='lost';
+
+    await say([
+
+        {
+            text:
+            'The battlefield overwhelms you.\n' +
+            'You are forced to retreat.'
+        },
+
+        {
+            text:
+            'Try again.'
+        }
+
+    ]);
+
+    hearts=3;
+
+    battleEnemies.forEach(e=>{
+
+        e.fallen=true
+
+    });
+
+    battleEnemies=[];
+
+    E=E.filter(e=>!e.enemy);
+
+    player.x=700;
+    player.y=570;
+
+    state='battle';
+
+    beginBattle()
+}
+
+
+/* =========================================================
+   BATTLE WIN
+========================================================= */
+
+async function battleWon(){
+
+    state='ending';
+
+    $('battleHUD').style.display='none';
+    $('controls').style.display='none';
+
+    await say([
+
+        {
+            sp:'American Officer',
+            look:LOOK.officer,
+            text:
+            'They are retreating!'
+        },
+
+        {
+            sp:'Washington',
+            look:LOOK.washington,
+            text:
+            'Yorktown is ours.\n' +
+            'The British army has been defeated.'
+        },
+
+        {
+            text:
+            'The victory at Yorktown effectively ends the Revolutionary War.'
+        },
+
+        {
+            text:
+            'The dream of independence is finally becoming reality.'
+        }
+
+    ]);
+
+    finishPhase()
+}
+
+
+/* =========================================================
+   FINISH → PHASE 7
+========================================================= */
+
+function finishPhase(){
+
+    state='finished';
+
+    $('fadeToBlack').style.opacity=1;
+
+    setTimeout(()=>{
+
+        $('loadingNextPhase').style.display='block'
+
+    },1500);
+
+    setTimeout(()=>{
+
+        window.location.href='phase7.html'
+
+    },3000)
+}
+
+
+/* =========================================================
+   BACKGROUND COLLISION / CAMERA
+========================================================= */
+
+let camera={
+    x:0,
+    y:0
+};
+
+
+/* =========================================================
+   GAME LOOP
+========================================================= */
+
+const keys={};
+
+
+function updatePlayer(){
+
+    if(
+        state!=='explore' &&
+        state!=='battle'
+    )
+        return;
+
+    const ax=
+        (keys.d||keys.ArrowRight?1:0)-
+        (keys.a||keys.ArrowLeft?1:0);
+
+    const ay=
+        (keys.s||keys.ArrowDown?1:0)-
+        (keys.w||keys.ArrowUp?1:0);
+
+    if(ax||ay){
+
+        const n=Math.hypot(ax,ay);
+
+        const sp=state==='battle'
+            ?3.4
+            :3.0;
+
+        const vx=ax/n*sp;
+        const vy=ay/n*sp;
+
+        if(
+            !blocked(
+                player.x+vx,
+                player.y
+            )
+        )
+            player.x+=vx;
+
+        if(
+            !blocked(
+                player.x,
+                player.y+vy
+            )
+        )
+            player.y+=vy;
+
+        player.moving=true;
+
+        player.t+=.26;
+
+        if(Math.abs(ax)>=Math.abs(ay)&&ax)
+
+            player.face=
+                ax>0?'right':'left';
+
+        else
+
+            player.face=
+                ay>0?'down':'up'
+
+    }else{
+
+        player.moving=false
+    }
+}
+
+
+/* =========================================================
+   PLAYER SHOOT
+========================================================= */
+
+let lastShot=0;
+
+function playerShoot(){
+
+    if(state!=='battle')
+        return;
+
+    const now=performance.now();
+
+    if(now-lastShot<500)
+        return;
+
+    lastShot=now;
+
+    let target=null;
+    let dist=Infinity;
+
+    for(const e of battleEnemies){
+
+        if(e.fallen)
+            continue;
+
+        const d=Math.hypot(
+            player.x-e.x,
+            player.y-e.y
+        );
+
+        if(d<dist && d<500){
+
+            dist=d;
+            target=e
+        }
+    }
+
+    if(!target){
+
+        target={
+            x:player.x+
+                (player.face==='right'?400:-400),
+            y:player.y
+        }
+    }
+
+    fire(
+        player,
+        target.enemy?target:null
+    )
+}
+
+
+/* =========================================================
+   ENEMY SHOOTING
+========================================================= */
+
+function enemyAI(){
+
+    if(state!=='battle')
+        return;
+
+    for(const e of battleEnemies){
+
+        if(e.fallen)
+            continue;
+
+        e.shootTimer--;
+
+        e.face='left';
+
+        if(e.shootTimer<=0){
+
+            e.shootTimer=
+                90+Math.random()*120;
+
+            const d=Math.hypot(
+                player.x-e.x,
+                player.y-e.y
+            );
+
+            if(d<550){
+
+                fire(e,player)
+            }
+        }
+    }
+}
+
+
+/* =========================================================
+   BULLET UPDATE
+========================================================= */
+
+function updateBullets(){
+
+    for(const b of bullets){
+
+        b.x+=b.vx;
+        b.y+=b.vy;
+
+        b.life--;
+
+        if(
+            b.target &&
+            !b.target.fallen
+        ){
+
+            const d=Math.hypot(
+                b.x-(b.target.x+24),
+                b.y-(b.target.y+25)
+            );
+
+            if(d<20){
+
+                if(b.owner===player){
+
+                    b.target.fallen=true;
+
+                    kills++;
+
+                    puff(
+                        b.target.x+24,
+                        b.target.y+40
+                    );
+
+                    sfx('hit')
+                }
+
+                else if(b.target===player){
+
+                    damagePlayer()
+                }
+
+                b.life=0
+            }
+        }
+    }
+
+    bullets=
+        bullets.filter(
+            b=>b.life>0
+        )
+}
+
+
+/* =========================================================
+   DRAW WORLD
+========================================================= */
+
+function drawWorld(){
+
+    ctx.drawImage(
+        bgc,
+        0,
+        0
+    );
+
+    /* smoke */
+
+    for(let i=0;i<10;i++){
+
+        const x=
+            700+
+            i*80+
+            Math.sin(time/900+i)*20;
+
+        const y=
+            480+
+            Math.sin(time/500+i)*30;
+
+        ctx.fillStyle=
+            'rgba(210,210,210,.08)';
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x,
+            y,
+            25,
+            0,
+            7
+        );
+
+        ctx.fill()
+    }
+}
+
+
+/* =========================================================
+   DRAW
+========================================================= */
+
+function draw(){
+
+    ctx.save();
+
+    if(screenShake>0){
+
+        ctx.translate(
+            (Math.random()-.5)*screenShake,
+            (Math.random()-.5)*screenShake
+        );
+
+        screenShake=
+            Math.max(
+                0,
+                screenShake-.6
+            )
+    }
+
+    ctx.fillStyle='#182331';
+
+    ctx.fillRect(
+        0,0,VW,VH
+    );
+
+    ctx.translate(
+        -Math.round(camera.x),
+        -Math.round(camera.y)
+    );
+
+    drawWorld();
+
+
+    /* ENTITIES */
+
+    [...E]
+    .sort(
+        (a,b)=>
+            a.y-b.y
+    )
+    .forEach(
+        e=>e.draw(ctx)
+    );
+
+
+    /* BULLETS */
+
+    for(const b of bullets){
+
+        ctx.save();
+
+        ctx.translate(
+            b.x,
+            b.y
+        );
+
+        ctx.rotate(
+            Math.atan2(
+                b.vy,
+                b.vx
+            )
+        );
+
+        ctx.fillStyle='#111';
+
+        ctx.fillRect(
+            -5,
+            -2,
+            10,
+            4
+        );
+
+        ctx.fillStyle='#777';
+
+        ctx.fillRect(
+            3,
+            -1,
+            5,
+            2
+        );
+
+        ctx.restore()
+    }
+
+
+    /* PARTICLES */
+
+    for(const p of particles){
+
+        ctx.globalAlpha=
+            p.l/p.m;
+
+        ctx.fillStyle=p.c;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            p.x,
+            p.y,
+            p.r,
+            0,
+            7
+        );
+
+        ctx.fill()
+    }
+
+    ctx.globalAlpha=1;
+
+    ctx.restore();
+
+
+    /* BATTLE HUD */
+
+    if(state==='battle'){
+
+        let heartsText='';
+
+        for(let i=0;i<3;i++)
+            heartsText+=
+                i<hearts?'♥ ':'♡ ';
+
+        $('hearts').textContent=
+            heartsText;
+
+        const alive=
+            battleEnemies.filter(
+                e=>!e.fallen
+            ).length;
+
+        $('enemyCount').textContent=
+            'ENEMIES: '+alive;
+
+        if(alive===0)
+            battleWon()
+    }
+
+
+    /* INTERACTION */
+
+    $('interactionHUD').style.display=
+        state==='explore'&&near
+        ?'block'
+        :'none';
+
+}
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+function frame(){
+
+    time=performance.now();
+
+    updatePlayer();
+
+    E.forEach(e=>{
+
+        if(
+            e!==player &&
+            !e.enemy
+        )
+            e.update()
+    });
+
+    enemyAI();
+
+    updateBullets();
+
+    for(const p of particles){
+
+        p.x+=p.vx;
+        p.y+=p.vy;
+
+        p.vy+=.08;
+
+        p.l--
+    }
+
+    particles=
+        particles.filter(
+            p=>p.l>0
+        );
+
+
+    if(state==='explore'){
+
+        near=null;
+
+        let best=70;
+
+        for(const e of E){
+
+            if(
+                e===player ||
+                e.fallen ||
+                e.enemy ||
+                e.ally
+            )
+                continue;
+
+            const d=Math.hypot(
+                player.x-e.x,
+                player.y-e.y
+            );
+
+            if(d<best){
+
+                best=d;
+                near=e
+            }
+        }
+    }
+
+
+    const focusX=
+        player.x+24;
+
+    const focusY=
+        player.y+24;
+
+    camera.x+=(
+        Math.max(
+            0,
+            Math.min(
+                MW-VW,
+                focusX-VW/2
+            )
+        )-
+        camera.x
+    )*.08;
+
+    camera.y+=(
+        Math.max(
+            0,
+            Math.min(
+                MH-VH,
+                focusY-VH/2
+            )
+        )-
+        camera.y
+    )*.08;
+
+
+    draw();
+
+    requestAnimationFrame(frame)
+}
+
+
+/* =========================================================
+   INITIALIZE
+========================================================= */
+
+function initGame(){
+
+    player=new Ent(
+        260,
+        570,
+        'player',
+        {
+            isPlayer:true,
+            speed:3
+        }
+    );
+
+    E.push(player);
+
+
+    mk(
+        'George Washington',
+        430,
+        540,
+        'washington',
+        {
+            lines:[
+                'The French have arrived, and our army surrounds Yorktown.',
+                'If we maintain the siege, Cornwallis will have nowhere left to run.',
+                'Speak with the officers, then prepare yourself for battle.'
+            ]
+        }
+    );
+
+
+    mk(
+        'French Officer',
+        700,
+        450,
+        'french',
+        {
+            lines:[
+                'France stands beside the American cause.',
+                'Our artillery is ready to strike the British positions.',
+                'The alliance may decide the fate of this war.'
+            ]
+        }
+    );
+
+
+    mk(
+        'American Officer',
+        900,
+        620,
+        'officer',
+        {
+            lines:[
+                'The British are preparing their final defense.',
+                'When the order comes, we attack.',
+                'Keep your musket ready.',
+                'Fire when you see them!'
+            ],
+            startBattle:true
+        }
+    );
+
+
+    /* FIRST INTRO */
+
+    setTimeout(()=>{
+
+        openingScene()
+
+    },700)
+}
+
+
+/* =========================================================
+   INPUT
+========================================================= */
+
+addEventListener(
+    'keydown',
+    e=>{
+
+        wake();
+
+        const k=
+            e.key.length===1
+            ?e.key.toLowerCase()
+            :e.key;
+
+        keys[k]=true;
+
+
+        if([
+            ' ',
+            'ArrowUp',
+            'ArrowDown',
+            'ArrowLeft',
+            'ArrowRight'
+        ].includes(e.key))
+            e.preventDefault();
+
+
+        /* DIALOGUE */
+
+        if(
+            k===' '||
+            k==='Enter'||
+            k==='z'
+        ){
+
+            advance()
+        }
+
+
+        /* TALK */
+
+        if(k==='e'){
+
+            if(D){
+
+                advance()
+
+            }
+
+            else if(
+                state==='explore' &&
+                near
+            ){
+
+                talk(near)
+            }
+        }
+
+
+        /* SHOOT */
+
+        if(
+            k===' ' &&
+            state==='battle'
+        ){
+
+            playerShoot()
+        }
+    }
+);
+
+
+addEventListener(
+    'keyup',
+    e=>{
+
+        keys[
+            e.key.length===1
+            ?e.key.toLowerCase()
+            :e.key
+        ]=false
+    }
+);
+
+
+initGame();
+
+requestAnimationFrame(frame);
+
+</script>
+
+</body>
+</html>

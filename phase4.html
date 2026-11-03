@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Thirteen - Act 4</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#fff}
+#gameContainer{position:relative;width:100vw;height:100vh;display:flex;justify-content:center;align-items:center}
+canvas#gameCanvas{background:#111;image-rendering:pixelated;box-shadow:0 0 50px #000}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(0,0,0,0) 50%,rgba(20,12,8,.82) 100%);box-shadow:inset 0 0 100px #000;z-index:10}
+#dialogueBox{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:90%;max-width:800px;height:160px;background:#000;border:4px solid #fff;border-radius:10px;padding:20px;display:none;z-index:20}
+#dialogueBox.active{display:flex;align-items:flex-start;gap:20px}
+#speakerPortrait{width:100px;height:100px;border:2px solid #555;background:#222;image-rendering:pixelated}
+#textContainer{flex:1;display:flex;flex-direction:column}
+#speakerName{font-size:24px;color:#f4c89a;margin-bottom:10px;text-transform:uppercase;letter-spacing:2px}
+#dialogueText{font-size:28px;line-height:1.1;color:#fff;white-space:pre-wrap}
+#dialogueText.nar{font-style:italic;color:#aaa}
+#continueIndicator{position:absolute;bottom:10px;right:20px;font-size:24px;animation:bounce .5s infinite alternate;display:none}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(5px)}}
+#musicHint{position:absolute;top:20px;left:20px;font-size:16px;color:#aaa;z-index:15}
+#sceneTitle{position:absolute;top:28px;left:50%;transform:translateX(-50%);font-size:24px;color:#d4a574;letter-spacing:3px;z-index:15;text-shadow:2px 2px #000}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:30}
+#fadeToBlack{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:40;transition:opacity 2s ease}
+#loadingNextPhase{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;color:#d4a574;text-align:center;display:none;z-index:50}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas"></canvas>
+<div id="vignette"></div>
+<div id="sceneTitle">PHILADELPHIA — JULY 1776</div>
+<div id="musicHint">Music: ON [M to toggle]</div>
+<div id="dialogueBox">
+<canvas id="speakerPortrait" width="64" height="64"></canvas>
+<div id="textContainer">
+<div id="speakerName"></div>
+<div id="dialogueText"></div>
+</div>
+<div id="continueIndicator">▼</div>
+</div>
+<div id="flash"></div>
+<div id="fadeToBlack"></div>
+<div id="loadingNextPhase"><h1>ACT 4: COMPLETE</h1><p>Loading Act 5...</p></div>
+</div>
+
+<audio id="bgMusic" src="music/himnousa.mp3" loop preload="auto"></audio>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('gameCanvas');
+const ctx=cv.getContext('2d');
+const VW=800,VH=600;
+cv.width=VW;
+cv.height=VH;
+
+function fit(){
+const s=Math.min(innerWidth/VW,innerHeight/VH);
+cv.style.width=VW*s+'px';
+cv.style.height=VH*s+'px'
+}
+addEventListener('resize',fit);
+fit();
+
+const bgMusic=$('bgMusic');
+bgMusic.volume=.42;
+let audioOn=true;
+let started=false;
+let time=0;
+let sceneTime=0;
+
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+const nb=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);
+{
+const d=nb.getChannelData(0);
+for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1
+}
+
+function noise(dur,vol,fq,type='lowpass'){
+if(!audioOn||AC.state!=='running')return;
+const s=AC.createBufferSource();
+s.buffer=nb;
+const f=AC.createBiquadFilter();
+f.type=type;
+f.frequency.value=fq;
+const g=AC.createGain();
+const n=AC.currentTime;
+g.gain.setValueAtTime(vol,n);
+g.gain.exponentialRampToValueAtTime(.001,n+dur);
+s.connect(f);
+f.connect(g);
+g.connect(AC.destination);
+s.start(n);
+s.stop(n+dur)
+}
+
+function blip(){
+if(!audioOn||AC.state!=='running')return;
+const o=AC.createOscillator();
+const g=AC.createGain();
+const n=AC.currentTime;
+o.type='square';
+o.frequency.value=380+Math.random()*80;
+g.gain.setValueAtTime(.035,n);
+g.gain.exponentialRampToValueAtTime(.001,n+.05);
+o.connect(g);
+g.connect(AC.destination);
+o.start(n);
+o.stop(n+.05)
+}
+
+function wake(){
+AC.resume();
+if(audioOn&&!started){
+started=true;
+bgMusic.play().catch(()=>{})
+}
+}
+
+addEventListener('click',wake);
+addEventListener('keydown',wake);
+
+const LOOK={
+player:{skin:'#f6eee2',hair:'#111',coat:'#2b63c9',deco:'rainbow',pants:'#1a1a1a'},
+jefferson:{skin:'#f6eee2',hair:'#6b4b35',coat:'#6b3528',deco:'plain',pants:'#292929',hat:'tricorn',hc:'#252525'},
+adams:{skin:'#f6eee2',hair:'#d8c9b2',coat:'#343f62',deco:'plain',pants:'#292929',hat:'tricorn',hc:'#252525'},
+clerk:{skin:'#f0d7bd',hair:'#33251c',coat:'#514b42',deco:'plain',pants:'#292929'}
+};
+
+function drawPerson(c,fx,fy,o,face,t,s,x){
+c.save();
+c.translate(fx,fy);
+c.scale(s,s);
+
+c.fillStyle='rgba(0,0,0,.35)';
+c.beginPath();
+c.ellipse(0,0,x.fallen?28:12,4,0,0,7);
+c.fill();
+
+if(x.fallen)c.rotate((x.fdir||1)*Math.PI/2);
+
+const side=face==='left'||face==='right';
+const dr=face==='left'?-1:1;
+const back=face==='up';
+const m=x.moving&&!x.fallen;
+const sw=m?Math.sin(t)*3:0;
+
+c.translate(0,m?-Math.abs(Math.cos(t))*1.5:0);
+
+const R=(a,b,w,h,col)=>{
+c.fillStyle='#111';
+c.fillRect(a-1.5,b-1.5,w+3,h+3);
+c.fillStyle=col;
+c.fillRect(a,b,w,h)
+};
+
+const tw=side?12:18;
+const cx=-tw/2;
+
+if(!o.dress){
+const pc=o.pants||'#222';
+if(side){
+for(const k of[1,-1])R(-3+k*sw*1.2,-9,6,9,pc)
+}else{
+R(-7,-9+sw*.3,5,9-sw*.3,pc);
+R(2,-9-sw*.3,5,9+sw*.3,pc)
+}
+}else{
+R(-6,-3,5,3,'#222');
+R(1,-3,5,3,'#222')
+}
+
+R(cx,-24,tw,15,o.coat);
+
+if(!back){
+if(o.deco==='rainbow'&&!side){
+c.fillStyle='#2ecc71';c.fillRect(-3,-23,2,13);
+c.fillStyle='#f1c40f';c.fillRect(-1,-23,2,13);
+c.fillStyle='#e74c3c';c.fillRect(1,-23,2,13)
+}
+else if(o.deco==='sash'){
+c.strokeStyle='#fff';
+c.lineWidth=3;
+c.beginPath();
+c.moveTo(cx+1,-23);
+c.lineTo(-cx-1,-10);
+c.stroke()
+}
+else{
+c.fillStyle='rgba(0,0,0,.35)';
+c.fillRect(-1,-20,2,2);
+c.fillRect(-1,-15,2,2)
+}
+}
+
+const as=m?Math.sin(t)*2:0;
+
+if(side){
+R(-2-sw,-23,4,10,o.coat)
+}else{
+R(cx-5,-23+as,4,10,o.coat);
+R(-cx+1,-23-as,4,10,o.coat)
+}
+
+const hy=-50;
+const hw=side?26:28;
+const hx0=-hw/2;
+
+R(hx0,hy,hw,26,o.skin);
+
+c.fillStyle=o.hair;
+
+if(back)c.fillRect(hx0,hy,hw,24);
+else if(side){
+c.fillRect(hx0,hy,hw,9);
+c.fillRect(dr>0?hx0:hx0+hw-13,hy+9,13,12)
+}else{
+c.fillRect(hx0,hy,hw,9);
+c.fillRect(hx0,hy+9,5,9);
+c.fillRect(hx0+hw-5,hy+9,5,9)
+}
+
+if(!back){
+const xs=side?[dr*6]:[-6,6];
+const ey=-38;
+const ex=x.ex||'neutral';
+const sur=ex==='surprised';
+
+if(side)R(dr>0?12:-15,-37,3,4,o.skin);
+
+for(const e0 of xs){
+c.fillStyle='#111';
+if(ex==='pain'){
+c.strokeStyle='#111';
+c.lineWidth=1.5;
+c.beginPath();
+c.moveTo(e0-3,ey-2);
+c.lineTo(e0+3,ey+3);
+c.moveTo(e0+3,ey-2);
+c.lineTo(e0-3,ey+3);
+c.stroke()
+}else{
+c.fillRect(e0-2,ey-(sur?1:0),4,sur?6:5)
+}
+}
+
+c.fillStyle='#111';
+
+if(ex==='open')c.fillRect(0,-31,5,4);
+else if(ex==='happy'){
+c.strokeStyle='#111';
+c.lineWidth=1.5;
+c.beginPath();
+c.arc(0,-33,4,.2,Math.PI-.2);
+c.stroke()
+}
+else if(ex==='angry')c.fillRect(-3,-30,6,2.5);
+else if(sur)c.fillRect(-2,-31,4,5);
+else c.fillRect(-2,-30,4,1.5)
+}
+
+if(o.hat==='tricorn'){
+c.fillStyle=o.hc;
+c.fillRect(-15,-58,30,6);
+c.fillRect(-9,-64,18,8);
+c.fillRect(-14,-61,5,8);
+c.fillRect(9,-61,5,8)
+}
+
+c.restore()
+}
+
+function drawBackground(){
+ctx.fillStyle='#30271f';
+ctx.fillRect(0,0,VW,VH);
+
+ctx.fillStyle='#46372b';
+ctx.fillRect(0,0,VW,245);
+
+for(let x=0;x<VW;x+=42){
+ctx.fillStyle=x%84?'#594536':'#514031';
+ctx.fillRect(x,0,38,245);
+ctx.fillStyle='rgba(0,0,0,.22)';
+ctx.fillRect(x+37,0,4,245)
+}
+
+ctx.fillStyle='#201914';
+ctx.fillRect(0,240,VW,10);
+
+ctx.fillStyle='#70563d';
+ctx.fillRect(0,250,VW,350);
+
+for(let y=250;y<600;y+=34){
+ctx.strokeStyle='rgba(30,20,14,.35)';
+ctx.lineWidth=2;
+ctx.beginPath();
+ctx.moveTo(0,y);
+ctx.lineTo(VW,y);
+ctx.stroke()
+}
+
+for(let x=0;x<VW;x+=80){
+ctx.strokeStyle='rgba(30,20,14,.2)';
+ctx.beginPath();
+ctx.moveTo(x,250);
+ctx.lineTo(x+18,600);
+ctx.stroke()
+}
+
+ctx.fillStyle='#241b16';
+ctx.fillRect(0,470,VW,130);
+
+ctx.fillStyle='#3b2a1d';
+ctx.fillRect(70,405,150,14);
+ctx.fillRect(580,405,150,14);
+
+ctx.fillStyle='#5d4229';
+ctx.fillRect(75,350,140,55);
+ctx.fillRect(585,350,140,55);
+
+ctx.fillStyle='#211914';
+ctx.fillRect(90,365,45,28);
+ctx.fillRect(155,365,45,28);
+ctx.fillRect(600,365,45,28);
+ctx.fillRect(665,365,45,28);
+
+ctx.fillStyle='#b49a72';
+ctx.fillRect(94,369,37,20);
+ctx.fillRect(159,369,37,20);
+ctx.fillRect(604,369,37,20);
+ctx.fillRect(669,369,37,20);
+
+ctx.fillStyle='#3a291d';
+ctx.fillRect(300,250,200,220);
+
+ctx.fillStyle='#2a211b';
+ctx.fillRect(320,270,160,175);
+
+ctx.fillStyle='#83694b';
+ctx.fillRect(340,290,120,150);
+
+ctx.fillStyle='#33251a';
+ctx.fillRect(350,300,100,12);
+
+ctx.fillStyle='#5b432c';
+ctx.fillRect(370,330,60,70);
+
+ctx.fillStyle='#c49b57';
+ctx.fillRect(394,360,5,5);
+
+ctx.fillStyle='#1b1511';
+ctx.fillRect(0,475,800,8);
+
+ctx.fillStyle='rgba(255,170,70,.12)';
+ctx.beginPath();
+ctx.arc(80,280,90,0,7);
+ctx.fill();
+
+ctx.fillStyle='#111';
+ctx.fillRect(76,280,8,70);
+
+ctx.fillStyle='#6b4423';
+ctx.fillRect(78,284,4,66);
+
+ctx.fillStyle='#f39c12';
+ctx.fillRect(74,265,12,18);
+ctx.fillStyle='#f1c40f';
+ctx.fillRect(77,260,6,18);
+ctx.fillStyle='#e74c3c';
+ctx.fillRect(78,255,4,10);
+
+ctx.fillStyle='rgba(255,170,70,.12)';
+ctx.beginPath();
+ctx.arc(720,280,90,0,7);
+ctx.fill();
+
+ctx.fillStyle='#111';
+ctx.fillRect(716,280,8,70);
+ctx.fillStyle='#6b4423';
+ctx.fillRect(718,284,4,66);
+ctx.fillStyle='#f39c12';
+ctx.fillRect(714,265,12,18);
+ctx.fillStyle='#f1c40f';
+ctx.fillRect(717,260,6,18);
+ctx.fillStyle='#e74c3c';
+ctx.fillRect(718,255,4,10);
+
+ctx.fillStyle='#d0b27c';
+ctx.fillRect(285,475,230,5);
+
+ctx.fillStyle='#241914';
+ctx.fillRect(292,478,216,4);
+
+for(let i=0;i<7;i++){
+ctx.fillStyle=i%2?'#8e6d46':'#5d432d';
+ctx.fillRect(300+i*30,455,24,20)
+}
+}
+
+const characters={
+jefferson:{x:420,y:400,face:'left',moving:false,t:0,ex:'neutral',look:LOOK.jefferson},
+adams:{x:570,y:385,face:'left',moving:false,t:1,ex:'neutral',look:LOOK.adams},
+clerk:{x:250,y:420,face:'right',moving:false,t:2,ex:'neutral',look:LOOK.clerk}
+};
+
+function drawCharacters(){
+drawPerson(ctx,characters.clerk.x,characters.clerk.y,characters.clerk.look,characters.clerk.face,characters.clerk.t,1,characters.clerk);
+drawPerson(ctx,characters.jefferson.x,characters.jefferson.y,characters.jefferson.look,characters.jefferson.face,characters.jefferson.t,1,characters.jefferson);
+drawPerson(ctx,characters.adams.x,characters.adams.y,characters.adams.look,characters.adams.face,characters.adams.t,1,characters.adams)
+}
+
+let D=null;
+let typeT=null;
+
+const box=$('dialogueBox');
+const nameEl=$('speakerName');
+const txt=$('dialogueText');
+const cont=$('continueIndicator');
+const por=$('speakerPortrait');
+const pC=por.getContext('2d');
+
+function drawPort(L,open){
+pC.fillStyle='#2a2118';
+pC.fillRect(0,0,64,64);
+drawPerson(pC,32,96,L.look,'down',0,1.5,{ex:open?'open':(L.expr||'neutral')})
+}
+
+function say(lines){
+return new Promise(r=>{
+D={lines,i:0,r,typing:false,ready:false};
+showLine()
+})
+}
+
+function showLine(){
+const L=D.lines[D.i];
+
+if(L.act)L.act();
+
+box.classList.add('active');
+cont.style.display='none';
+
+if(L.sp){
+nameEl.textContent=L.sp;
+por.style.display='block';
+txt.className='';
+drawPort(L,false)
+}else{
+nameEl.textContent='';
+por.style.display='none';
+txt.className='nar'
+}
+
+txt.textContent='';
+let n=0;
+D.typing=true;
+D.ready=false;
+clearInterval(typeT);
+
+typeT=setInterval(()=>{
+if(n<L.text.length){
+txt.textContent+=L.text[n];
+
+if(L.sp&&n%3===0)drawPort(L,(n/3|0)%2===0);
+if(n%2===0&&L.text[n]!==' ')blip();
+
+n++
+}else done()
+},28)
+}
+
+function done(){
+clearInterval(typeT);
+D.typing=false;
+D.ready=true;
+
+const L=D.lines[D.i];
+
+if(L.sp)drawPort(L,false);
+
+txt.textContent=L.text;
+cont.style.display='block';
+
+if(L.auto){
+const d=D;
+const i=D.i;
+setTimeout(()=>{
+if(D===d&&D.i===i)next()
+},L.auto)
+}
+}
+
+function advance(){
+if(!D)return;
+if(D.typing)done();
+else if(D.ready)next()
+}
+
+function next(){
+D.i++;
+
+if(D.i>=D.lines.length){
+box.classList.remove('active');
+const r=D.r;
+D=null;
+r()
+}else{
+showLine()
+}
+}
+
+async function runScene(){
+
+await sleep(900);
+
+await say([
+{text:'Philadelphia, July 1776.\nThe delegates have spent weeks arguing over the future of the colonies.',auto:1800},
+{text:'Inside the State House, a final decision is drawing near.',auto:1800}
+]);
+
+characters.jefferson.face='right';
+characters.adams.face='left';
+characters.jefferson.ex='neutral';
+characters.adams.ex='neutral';
+
+await say([
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'The question before us is no longer whether we shall resist Britain.'},
+{sp:'John Adams',look:LOOK.adams,text:'No. The question is whether we have the courage to declare what we already believe.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'That every man possesses rights which no king may rightfully take away.'},
+{sp:'John Adams',look:LOOK.adams,text:'And that these colonies must decide their own fate.'}
+]);
+
+characters.jefferson.ex='surprised';
+
+await say([
+{sp:'Clerk',look:LOOK.clerk,text:'Gentlemen... the delegates are ready.'},
+{sp:'John Adams',look:LOOK.adams,text:'Then let them hear it.'},
+{text:'The room falls silent.',auto:1200}
+]);
+
+characters.jefferson.ex='neutral';
+
+await say([
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'We cannot know what comes after this day.'},
+{sp:'John Adams',look:LOOK.adams,text:'No one can.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'There may be war.'},
+{sp:'John Adams',look:LOOK.adams,text:'There almost certainly will be.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'Then let history judge whether we were right.'}
+]);
+
+await say([
+{text:'The delegates rise.',auto:1000},
+{text:'Pens scratch across parchment as the fate of thirteen colonies is placed upon the page.',auto:2200}
+]);
+
+characters.jefferson.ex='happy';
+characters.adams.ex='happy';
+
+await say([
+{sp:'John Adams',look:LOOK.adams,text:'It is done.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'Then let the world know.'}
+]);
+
+finish()
+}
+
+function finish(){
+$('fadeToBlack').style.opacity=1;
+
+let v=.42;
+
+const fv=setInterval(()=>{
+v=Math.max(0,v-.025);
+bgMusic.volume=v;
+
+if(v<=0)clearInterval(fv)
+},100);
+
+setTimeout(()=>{
+$('loadingNextPhase').style.display='block'
+},1500);
+
+setTimeout(()=>{
+window.location.href='phase5.html'
+},3000)
+}
+
+function sleep(ms){
+return new Promise(r=>setTimeout(r,ms))
+}
+
+addEventListener('keydown',e=>{
+wake();
+
+const k=e.key.length===1?e.key.toLowerCase():e.key;
+
+if(k===' '||k==='Enter'||k==='z'){
+e.preventDefault();
+advance()
+}
+
+if(k==='m'){
+audioOn=!audioOn;
+
+if(audioOn){
+bgMusic.play().catch(()=>{})
+}else{
+bgMusic.pause()
+}
+
+$('musicHint').textContent=audioOn?'Music: ON [M to toggle]':'Music: OFF [M to toggle]'
+}
+});
+
+function frame(){
+time=performance.now();
+sceneTime+=.016;
+
+characters.jefferson.t=sceneTime;
+characters.adams.t=sceneTime+.7;
+characters.clerk.t=sceneTime+1.4;
+
+ctx.clearRect(0,0,VW,VH);
+
+drawBackground();
+drawCharacters();
+
+ctx.fillStyle='rgba(255,190,120,.045)';
+ctx.fillRect(0,0,VW,VH);
+
+requestAnimationFrame(frame)
+}
+
+frame();
+
+bgMusic.play().catch(()=>{});
+runScene();
+</script>
+</body>
+</html<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Thirteen - Act 4</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#fff}
+#gameContainer{position:relative;width:100vw;height:100vh;display:flex;justify-content:center;align-items:center}
+canvas#gameCanvas{background:#111;image-rendering:pixelated;box-shadow:0 0 50px #000}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(0,0,0,0) 50%,rgba(20,12,8,.82) 100%);box-shadow:inset 0 0 100px #000;z-index:10}
+#dialogueBox{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:90%;max-width:800px;height:160px;background:#000;border:4px solid #fff;border-radius:10px;padding:20px;display:none;z-index:20}
+#dialogueBox.active{display:flex;align-items:flex-start;gap:20px}
+#speakerPortrait{width:100px;height:100px;border:2px solid #555;background:#222;image-rendering:pixelated}
+#textContainer{flex:1;display:flex;flex-direction:column}
+#speakerName{font-size:24px;color:#f4c89a;margin-bottom:10px;text-transform:uppercase;letter-spacing:2px}
+#dialogueText{font-size:28px;line-height:1.1;color:#fff;white-space:pre-wrap}
+#dialogueText.nar{font-style:italic;color:#aaa}
+#continueIndicator{position:absolute;bottom:10px;right:20px;font-size:24px;animation:bounce .5s infinite alternate;display:none}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(5px)}}
+#musicHint{position:absolute;top:20px;left:20px;font-size:16px;color:#aaa;z-index:15}
+#sceneTitle{position:absolute;top:28px;left:50%;transform:translateX(-50%);font-size:24px;color:#d4a574;letter-spacing:3px;z-index:15;text-shadow:2px 2px #000}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:30}
+#fadeToBlack{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:40;transition:opacity 2s ease}
+#loadingNextPhase{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;color:#d4a574;text-align:center;display:none;z-index:50}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas"></canvas>
+<div id="vignette"></div>
+<div id="sceneTitle">PHILADELPHIA — JULY 1776</div>
+<div id="musicHint">Music: ON [M to toggle]</div>
+<div id="dialogueBox">
+<canvas id="speakerPortrait" width="64" height="64"></canvas>
+<div id="textContainer">
+<div id="speakerName"></div>
+<div id="dialogueText"></div>
+</div>
+<div id="continueIndicator">▼</div>
+</div>
+<div id="flash"></div>
+<div id="fadeToBlack"></div>
+<div id="loadingNextPhase"><h1>ACT 4: COMPLETE</h1><p>Loading Act 5...</p></div>
+</div>
+
+<audio id="bgMusic" src="music/himnousa.mp3" loop preload="auto"></audio>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('gameCanvas');
+const ctx=cv.getContext('2d');
+const VW=800,VH=600;
+cv.width=VW;
+cv.height=VH;
+
+function fit(){
+const s=Math.min(innerWidth/VW,innerHeight/VH);
+cv.style.width=VW*s+'px';
+cv.style.height=VH*s+'px'
+}
+addEventListener('resize',fit);
+fit();
+
+const bgMusic=$('bgMusic');
+bgMusic.volume=.42;
+let audioOn=true;
+let started=false;
+let time=0;
+let sceneTime=0;
+
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+const nb=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);
+{
+const d=nb.getChannelData(0);
+for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1
+}
+
+function noise(dur,vol,fq,type='lowpass'){
+if(!audioOn||AC.state!=='running')return;
+const s=AC.createBufferSource();
+s.buffer=nb;
+const f=AC.createBiquadFilter();
+f.type=type;
+f.frequency.value=fq;
+const g=AC.createGain();
+const n=AC.currentTime;
+g.gain.setValueAtTime(vol,n);
+g.gain.exponentialRampToValueAtTime(.001,n+dur);
+s.connect(f);
+f.connect(g);
+g.connect(AC.destination);
+s.start(n);
+s.stop(n+dur)
+}
+
+function blip(){
+if(!audioOn||AC.state!=='running')return;
+const o=AC.createOscillator();
+const g=AC.createGain();
+const n=AC.currentTime;
+o.type='square';
+o.frequency.value=380+Math.random()*80;
+g.gain.setValueAtTime(.035,n);
+g.gain.exponentialRampToValueAtTime(.001,n+.05);
+o.connect(g);
+g.connect(AC.destination);
+o.start(n);
+o.stop(n+.05)
+}
+
+function wake(){
+AC.resume();
+if(audioOn&&!started){
+started=true;
+bgMusic.play().catch(()=>{})
+}
+}
+
+addEventListener('click',wake);
+addEventListener('keydown',wake);
+
+const LOOK={
+player:{skin:'#f6eee2',hair:'#111',coat:'#2b63c9',deco:'rainbow',pants:'#1a1a1a'},
+jefferson:{skin:'#f6eee2',hair:'#6b4b35',coat:'#6b3528',deco:'plain',pants:'#292929',hat:'tricorn',hc:'#252525'},
+adams:{skin:'#f6eee2',hair:'#d8c9b2',coat:'#343f62',deco:'plain',pants:'#292929',hat:'tricorn',hc:'#252525'},
+clerk:{skin:'#f0d7bd',hair:'#33251c',coat:'#514b42',deco:'plain',pants:'#292929'}
+};
+
+function drawPerson(c,fx,fy,o,face,t,s,x){
+c.save();
+c.translate(fx,fy);
+c.scale(s,s);
+
+c.fillStyle='rgba(0,0,0,.35)';
+c.beginPath();
+c.ellipse(0,0,x.fallen?28:12,4,0,0,7);
+c.fill();
+
+if(x.fallen)c.rotate((x.fdir||1)*Math.PI/2);
+
+const side=face==='left'||face==='right';
+const dr=face==='left'?-1:1;
+const back=face==='up';
+const m=x.moving&&!x.fallen;
+const sw=m?Math.sin(t)*3:0;
+
+c.translate(0,m?-Math.abs(Math.cos(t))*1.5:0);
+
+const R=(a,b,w,h,col)=>{
+c.fillStyle='#111';
+c.fillRect(a-1.5,b-1.5,w+3,h+3);
+c.fillStyle=col;
+c.fillRect(a,b,w,h)
+};
+
+const tw=side?12:18;
+const cx=-tw/2;
+
+if(!o.dress){
+const pc=o.pants||'#222';
+if(side){
+for(const k of[1,-1])R(-3+k*sw*1.2,-9,6,9,pc)
+}else{
+R(-7,-9+sw*.3,5,9-sw*.3,pc);
+R(2,-9-sw*.3,5,9+sw*.3,pc)
+}
+}else{
+R(-6,-3,5,3,'#222');
+R(1,-3,5,3,'#222')
+}
+
+R(cx,-24,tw,15,o.coat);
+
+if(!back){
+if(o.deco==='rainbow'&&!side){
+c.fillStyle='#2ecc71';c.fillRect(-3,-23,2,13);
+c.fillStyle='#f1c40f';c.fillRect(-1,-23,2,13);
+c.fillStyle='#e74c3c';c.fillRect(1,-23,2,13)
+}
+else if(o.deco==='sash'){
+c.strokeStyle='#fff';
+c.lineWidth=3;
+c.beginPath();
+c.moveTo(cx+1,-23);
+c.lineTo(-cx-1,-10);
+c.stroke()
+}
+else{
+c.fillStyle='rgba(0,0,0,.35)';
+c.fillRect(-1,-20,2,2);
+c.fillRect(-1,-15,2,2)
+}
+}
+
+const as=m?Math.sin(t)*2:0;
+
+if(side){
+R(-2-sw,-23,4,10,o.coat)
+}else{
+R(cx-5,-23+as,4,10,o.coat);
+R(-cx+1,-23-as,4,10,o.coat)
+}
+
+const hy=-50;
+const hw=side?26:28;
+const hx0=-hw/2;
+
+R(hx0,hy,hw,26,o.skin);
+
+c.fillStyle=o.hair;
+
+if(back)c.fillRect(hx0,hy,hw,24);
+else if(side){
+c.fillRect(hx0,hy,hw,9);
+c.fillRect(dr>0?hx0:hx0+hw-13,hy+9,13,12)
+}else{
+c.fillRect(hx0,hy,hw,9);
+c.fillRect(hx0,hy+9,5,9);
+c.fillRect(hx0+hw-5,hy+9,5,9)
+}
+
+if(!back){
+const xs=side?[dr*6]:[-6,6];
+const ey=-38;
+const ex=x.ex||'neutral';
+const sur=ex==='surprised';
+
+if(side)R(dr>0?12:-15,-37,3,4,o.skin);
+
+for(const e0 of xs){
+c.fillStyle='#111';
+if(ex==='pain'){
+c.strokeStyle='#111';
+c.lineWidth=1.5;
+c.beginPath();
+c.moveTo(e0-3,ey-2);
+c.lineTo(e0+3,ey+3);
+c.moveTo(e0+3,ey-2);
+c.lineTo(e0-3,ey+3);
+c.stroke()
+}else{
+c.fillRect(e0-2,ey-(sur?1:0),4,sur?6:5)
+}
+}
+
+c.fillStyle='#111';
+
+if(ex==='open')c.fillRect(0,-31,5,4);
+else if(ex==='happy'){
+c.strokeStyle='#111';
+c.lineWidth=1.5;
+c.beginPath();
+c.arc(0,-33,4,.2,Math.PI-.2);
+c.stroke()
+}
+else if(ex==='angry')c.fillRect(-3,-30,6,2.5);
+else if(sur)c.fillRect(-2,-31,4,5);
+else c.fillRect(-2,-30,4,1.5)
+}
+
+if(o.hat==='tricorn'){
+c.fillStyle=o.hc;
+c.fillRect(-15,-58,30,6);
+c.fillRect(-9,-64,18,8);
+c.fillRect(-14,-61,5,8);
+c.fillRect(9,-61,5,8)
+}
+
+c.restore()
+}
+
+function drawBackground(){
+ctx.fillStyle='#30271f';
+ctx.fillRect(0,0,VW,VH);
+
+ctx.fillStyle='#46372b';
+ctx.fillRect(0,0,VW,245);
+
+for(let x=0;x<VW;x+=42){
+ctx.fillStyle=x%84?'#594536':'#514031';
+ctx.fillRect(x,0,38,245);
+ctx.fillStyle='rgba(0,0,0,.22)';
+ctx.fillRect(x+37,0,4,245)
+}
+
+ctx.fillStyle='#201914';
+ctx.fillRect(0,240,VW,10);
+
+ctx.fillStyle='#70563d';
+ctx.fillRect(0,250,VW,350);
+
+for(let y=250;y<600;y+=34){
+ctx.strokeStyle='rgba(30,20,14,.35)';
+ctx.lineWidth=2;
+ctx.beginPath();
+ctx.moveTo(0,y);
+ctx.lineTo(VW,y);
+ctx.stroke()
+}
+
+for(let x=0;x<VW;x+=80){
+ctx.strokeStyle='rgba(30,20,14,.2)';
+ctx.beginPath();
+ctx.moveTo(x,250);
+ctx.lineTo(x+18,600);
+ctx.stroke()
+}
+
+ctx.fillStyle='#241b16';
+ctx.fillRect(0,470,VW,130);
+
+ctx.fillStyle='#3b2a1d';
+ctx.fillRect(70,405,150,14);
+ctx.fillRect(580,405,150,14);
+
+ctx.fillStyle='#5d4229';
+ctx.fillRect(75,350,140,55);
+ctx.fillRect(585,350,140,55);
+
+ctx.fillStyle='#211914';
+ctx.fillRect(90,365,45,28);
+ctx.fillRect(155,365,45,28);
+ctx.fillRect(600,365,45,28);
+ctx.fillRect(665,365,45,28);
+
+ctx.fillStyle='#b49a72';
+ctx.fillRect(94,369,37,20);
+ctx.fillRect(159,369,37,20);
+ctx.fillRect(604,369,37,20);
+ctx.fillRect(669,369,37,20);
+
+ctx.fillStyle='#3a291d';
+ctx.fillRect(300,250,200,220);
+
+ctx.fillStyle='#2a211b';
+ctx.fillRect(320,270,160,175);
+
+ctx.fillStyle='#83694b';
+ctx.fillRect(340,290,120,150);
+
+ctx.fillStyle='#33251a';
+ctx.fillRect(350,300,100,12);
+
+ctx.fillStyle='#5b432c';
+ctx.fillRect(370,330,60,70);
+
+ctx.fillStyle='#c49b57';
+ctx.fillRect(394,360,5,5);
+
+ctx.fillStyle='#1b1511';
+ctx.fillRect(0,475,800,8);
+
+ctx.fillStyle='rgba(255,170,70,.12)';
+ctx.beginPath();
+ctx.arc(80,280,90,0,7);
+ctx.fill();
+
+ctx.fillStyle='#111';
+ctx.fillRect(76,280,8,70);
+
+ctx.fillStyle='#6b4423';
+ctx.fillRect(78,284,4,66);
+
+ctx.fillStyle='#f39c12';
+ctx.fillRect(74,265,12,18);
+ctx.fillStyle='#f1c40f';
+ctx.fillRect(77,260,6,18);
+ctx.fillStyle='#e74c3c';
+ctx.fillRect(78,255,4,10);
+
+ctx.fillStyle='rgba(255,170,70,.12)';
+ctx.beginPath();
+ctx.arc(720,280,90,0,7);
+ctx.fill();
+
+ctx.fillStyle='#111';
+ctx.fillRect(716,280,8,70);
+ctx.fillStyle='#6b4423';
+ctx.fillRect(718,284,4,66);
+ctx.fillStyle='#f39c12';
+ctx.fillRect(714,265,12,18);
+ctx.fillStyle='#f1c40f';
+ctx.fillRect(717,260,6,18);
+ctx.fillStyle='#e74c3c';
+ctx.fillRect(718,255,4,10);
+
+ctx.fillStyle='#d0b27c';
+ctx.fillRect(285,475,230,5);
+
+ctx.fillStyle='#241914';
+ctx.fillRect(292,478,216,4);
+
+for(let i=0;i<7;i++){
+ctx.fillStyle=i%2?'#8e6d46':'#5d432d';
+ctx.fillRect(300+i*30,455,24,20)
+}
+}
+
+const characters={
+jefferson:{x:420,y:400,face:'left',moving:false,t:0,ex:'neutral',look:LOOK.jefferson},
+adams:{x:570,y:385,face:'left',moving:false,t:1,ex:'neutral',look:LOOK.adams},
+clerk:{x:250,y:420,face:'right',moving:false,t:2,ex:'neutral',look:LOOK.clerk}
+};
+
+function drawCharacters(){
+drawPerson(ctx,characters.clerk.x,characters.clerk.y,characters.clerk.look,characters.clerk.face,characters.clerk.t,1,characters.clerk);
+drawPerson(ctx,characters.jefferson.x,characters.jefferson.y,characters.jefferson.look,characters.jefferson.face,characters.jefferson.t,1,characters.jefferson);
+drawPerson(ctx,characters.adams.x,characters.adams.y,characters.adams.look,characters.adams.face,characters.adams.t,1,characters.adams)
+}
+
+let D=null;
+let typeT=null;
+
+const box=$('dialogueBox');
+const nameEl=$('speakerName');
+const txt=$('dialogueText');
+const cont=$('continueIndicator');
+const por=$('speakerPortrait');
+const pC=por.getContext('2d');
+
+function drawPort(L,open){
+pC.fillStyle='#2a2118';
+pC.fillRect(0,0,64,64);
+drawPerson(pC,32,96,L.look,'down',0,1.5,{ex:open?'open':(L.expr||'neutral')})
+}
+
+function say(lines){
+return new Promise(r=>{
+D={lines,i:0,r,typing:false,ready:false};
+showLine()
+})
+}
+
+function showLine(){
+const L=D.lines[D.i];
+
+if(L.act)L.act();
+
+box.classList.add('active');
+cont.style.display='none';
+
+if(L.sp){
+nameEl.textContent=L.sp;
+por.style.display='block';
+txt.className='';
+drawPort(L,false)
+}else{
+nameEl.textContent='';
+por.style.display='none';
+txt.className='nar'
+}
+
+txt.textContent='';
+let n=0;
+D.typing=true;
+D.ready=false;
+clearInterval(typeT);
+
+typeT=setInterval(()=>{
+if(n<L.text.length){
+txt.textContent+=L.text[n];
+
+if(L.sp&&n%3===0)drawPort(L,(n/3|0)%2===0);
+if(n%2===0&&L.text[n]!==' ')blip();
+
+n++
+}else done()
+},28)
+}
+
+function done(){
+clearInterval(typeT);
+D.typing=false;
+D.ready=true;
+
+const L=D.lines[D.i];
+
+if(L.sp)drawPort(L,false);
+
+txt.textContent=L.text;
+cont.style.display='block';
+
+if(L.auto){
+const d=D;
+const i=D.i;
+setTimeout(()=>{
+if(D===d&&D.i===i)next()
+},L.auto)
+}
+}
+
+function advance(){
+if(!D)return;
+if(D.typing)done();
+else if(D.ready)next()
+}
+
+function next(){
+D.i++;
+
+if(D.i>=D.lines.length){
+box.classList.remove('active');
+const r=D.r;
+D=null;
+r()
+}else{
+showLine()
+}
+}
+
+async function runScene(){
+
+await sleep(900);
+
+await say([
+{text:'Philadelphia, July 1776.\nThe delegates have spent weeks arguing over the future of the colonies.',auto:1800},
+{text:'Inside the State House, a final decision is drawing near.',auto:1800}
+]);
+
+characters.jefferson.face='right';
+characters.adams.face='left';
+characters.jefferson.ex='neutral';
+characters.adams.ex='neutral';
+
+await say([
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'The question before us is no longer whether we shall resist Britain.'},
+{sp:'John Adams',look:LOOK.adams,text:'No. The question is whether we have the courage to declare what we already believe.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'That every man possesses rights which no king may rightfully take away.'},
+{sp:'John Adams',look:LOOK.adams,text:'And that these colonies must decide their own fate.'}
+]);
+
+characters.jefferson.ex='surprised';
+
+await say([
+{sp:'Clerk',look:LOOK.clerk,text:'Gentlemen... the delegates are ready.'},
+{sp:'John Adams',look:LOOK.adams,text:'Then let them hear it.'},
+{text:'The room falls silent.',auto:1200}
+]);
+
+characters.jefferson.ex='neutral';
+
+await say([
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'We cannot know what comes after this day.'},
+{sp:'John Adams',look:LOOK.adams,text:'No one can.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'There may be war.'},
+{sp:'John Adams',look:LOOK.adams,text:'There almost certainly will be.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'Then let history judge whether we were right.'}
+]);
+
+await say([
+{text:'The delegates rise.',auto:1000},
+{text:'Pens scratch across parchment as the fate of thirteen colonies is placed upon the page.',auto:2200}
+]);
+
+characters.jefferson.ex='happy';
+characters.adams.ex='happy';
+
+await say([
+{sp:'John Adams',look:LOOK.adams,text:'It is done.'},
+{sp:'Thomas Jefferson',look:LOOK.jefferson,text:'Then let the world know.'}
+]);
+
+finish()
+}
+
+function finish(){
+$('fadeToBlack').style.opacity=1;
+
+let v=.42;
+
+const fv=setInterval(()=>{
+v=Math.max(0,v-.025);
+bgMusic.volume=v;
+
+if(v<=0)clearInterval(fv)
+},100);
+
+setTimeout(()=>{
+$('loadingNextPhase').style.display='block'
+},1500);
+
+setTimeout(()=>{
+window.location.href='phase5.html'
+},3000)
+}
+
+function sleep(ms){
+return new Promise(r=>setTimeout(r,ms))
+}
+
+addEventListener('keydown',e=>{
+wake();
+
+const k=e.key.length===1?e.key.toLowerCase():e.key;
+
+if(k===' '||k==='Enter'||k==='z'){
+e.preventDefault();
+advance()
+}
+
+if(k==='m'){
+audioOn=!audioOn;
+
+if(audioOn){
+bgMusic.play().catch(()=>{})
+}else{
+bgMusic.pause()
+}
+
+$('musicHint').textContent=audioOn?'Music: ON [M to toggle]':'Music: OFF [M to toggle]'
+}
+});
+
+function frame(){
+time=performance.now();
+sceneTime+=.016;
+
+characters.jefferson.t=sceneTime;
+characters.adams.t=sceneTime+.7;
+characters.clerk.t=sceneTime+1.4;
+
+ctx.clearRect(0,0,VW,VH);
+
+drawBackground();
+drawCharacters();
+
+ctx.fillStyle='rgba(255,190,120,.045)';
+ctx.fillRect(0,0,VW,VH);
+
+requestAnimationFrame(frame)
+}
+
+frame();
+
+bgMusic.play().catch(()=>{});
+runScene();
+</script>
+</body>
+</html>>

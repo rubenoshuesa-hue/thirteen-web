@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thirteen</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            overflow: hidden;
+            background-color: #1a0f0a;
+        }
+
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a0f0a 0%, #3d2817 50%, #1a0f0a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 1s ease;
+        }
+
+        #loadingScreen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-title,
+        .menu-title {
+            font-size: 3em;
+            color: #d4a574;
+            text-shadow: 3px 3px 6px #000, 0 0 20px #d4a574;
+            margin-bottom: 40px;
+            letter-spacing: 4px;
+            text-align: center;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        .menu-title {
+            font-size: 4.5em;
+            letter-spacing: 8px;
+            margin-bottom: 50px;
+            z-index: 1;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 3px 3px 6px #000, 0 0 20px #d4a574; }
+            to { text-shadow: 3px 3px 6px #000, 0 0 40px #f4c89a, 0 0 60px #d4a574; }
+        }
+
+        .loading-bar-container {
+            width: 60%;
+            max-width: 600px;
+            height: 30px;
+            background-color: #2a1a0f;
+            border: 3px solid #8b6914;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(139, 105, 20, 0.5);
+        }
+
+        .loading-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #8b6914, #d4a574, #f4c89a);
+            border-radius: 12px;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 10px #d4a574;
+        }
+
+        .loading-text {
+            color: #d4a574;
+            margin-top: 20px;
+            font-size: 1.2em;
+            letter-spacing: 2px;
+        }
+
+        .loading-percentage {
+            color: #f4c89a;
+            margin-top: 10px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        #mainMenu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('scenarios/menufoto.jpg');
+            background-size: cover;
+            background-position: center;
+            background-color: #1a0f0a;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            z-index: 1;
+        }
+
+        .menu-btn {
+            padding: 18px 80px;
+            font-size: 1.4em;
+            font-family: 'Georgia', serif;
+            letter-spacing: 3px;
+            color: #d4a574;
+            background: linear-gradient(180deg, #3d2817 0%, #2a1a0f 100%);
+            border: 3px solid #8b6914;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            min-width: 320px;
+        }
+
+        .menu-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(212, 165, 116, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .menu-btn:hover::before {
+            left: 100%;
+        }
+
+        .menu-btn:hover {
+            background: linear-gradient(180deg, #5a3d24 0%, #3d2817 100%);
+            color: #f4c89a;
+            border-color: #d4a574;
+            box-shadow: 0 0 25px rgba(212, 165, 116, 0.6);
+            transform: scale(1.05);
+        }
+
+        .menu-btn:active {
+            transform: scale(0.98);
+        }
+
+        #settingsPanel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 600;
+        }
+
+        #settingsPanel.visible {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .settings-content {
+            background: linear-gradient(135deg, #2a1a0f 0%, #3d2817 100%);
+            border: 4px solid #8b6914;
+            border-radius: 15px;
+            padding: 40px 60px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 0 50px rgba(139, 105, 20, 0.5);
+        }
+
+        .settings-title {
+            font-size: 2.5em;
+            color: #d4a574;
+            text-align: center;
+            margin-bottom: 30px;
+            letter-spacing: 4px;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        .settings-section {
+            margin-bottom: 30px;
+        }
+
+        .settings-section h3 {
+            color: #a08050;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+            border-bottom: 2px solid #8b6914;
+            padding-bottom: 8px;
+        }
+
+        .difficulty-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .difficulty-btn {
+            flex: 1;
+            min-width: 120px;
+            padding: 15px 20px;
+            font-family: 'Georgia', serif;
+            font-size: 1em;
+            letter-spacing: 2px;
+            color: #a08050;
+            background: #1a0f0a;
+            border: 3px solid #5a3d24;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .difficulty-btn:hover {
+            border-color: #8b6914;
+            color: #d4a574;
+        }
+
+        .difficulty-btn.active {
+            background: linear-gradient(180deg, #5a3d24 0%, #3d2817 100%);
+            border-color: #d4a574;
+            color: #f4c89a;
+            box-shadow: 0 0 15px rgba(212, 165, 116, 0.4);
+        }
+
+        .audio-control {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .audio-control label {
+            color: #d4a574;
+            font-size: 1.1em;
+            min-width: 120px;
+            letter-spacing: 1px;
+        }
+
+        .audio-control input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 10px;
+            background: #1a0f0a;
+            border: 2px solid #5a3d24;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .audio-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            background: linear-gradient(180deg, #d4a574, #8b6914);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #f4c89a;
+            box-shadow: 0 0 8px rgba(212, 165, 116, 0.6);
+        }
+
+        .audio-control input[type="range"]::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            background: linear-gradient(180deg, #d4a574, #8b6914);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #f4c89a;
+            box-shadow: 0 0 8px rgba(212, 165, 116, 0.6);
+        }
+
+        .audio-value {
+            color: #f4c89a;
+            font-size: 1em;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .back-btn {
+            display: block;
+            margin: 30px auto 0;
+            padding: 15px 60px;
+            font-family: 'Georgia', serif;
+            font-size: 1.2em;
+            letter-spacing: 3px;
+            color: #d4a574;
+            background: linear-gradient(180deg, #3d2817 0%, #2a1a0f 100%);
+            border: 3px solid #8b6914;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .back-btn:hover {
+            background: linear-gradient(180deg, #5a3d24 0%, #3d2817 100%);
+            color: #f4c89a;
+            border-color: #d4a574;
+            box-shadow: 0 0 20px rgba(212, 165, 116, 0.5);
+        }
+
+        .settings-content::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .settings-content::-webkit-scrollbar-track {
+            background: #1a0f0a;
+            border-radius: 5px;
+        }
+
+        .settings-content::-webkit-scrollbar-thumb {
+            background: #8b6914;
+            border-radius: 5px;
+        }
+
+        .settings-content::-webkit-scrollbar-thumb:hover {
+            background: #d4a574;
+        }
+
+        .music-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            color: #d4a574;
+            font-size: 0.9em;
+            letter-spacing: 2px;
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0.7;
+        }
+
+        .music-note {
+            animation: musicPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes musicPulse {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .loading-title { font-size: 2.5em; letter-spacing: 3px; }
+            .menu-title { font-size: 3em; letter-spacing: 5px; }
+            .menu-btn { padding: 15px 40px; font-size: 1.1em; min-width: 250px; }
+            .settings-content { padding: 25px 30px; }
+            .settings-title { font-size: 1.8em; }
+            .difficulty-options { flex-direction: column; }
+        }
+
+        @media (max-width: 480px) {
+            .loading-title { font-size: 1.8em; }
+            .menu-title { font-size: 2.2em; letter-spacing: 3px; }
+            .menu-btn { padding: 12px 30px; font-size: 1em; min-width: 200px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loadingScreen">
+        <h1 class="loading-title">⚔ THIRTEEN ⚔</h1>
+        <div class="loading-bar-container">
+            <div class="loading-bar" id="loadingBar"></div>
+        </div>
+        <p class="loading-text" id="loadingText">Loading resources...</p>
+        <p class="loading-percentage" id="loadingPercentage">0%</p>
+    </div>
+
+    <div id="mainMenu">
+        <h1 class="menu-title">⚔ THIRTEEN ⚔</h1>
+        <div class="menu-buttons">
+            <button class="menu-btn" id="btnNewGame">▶ New Game</button>
+            <button class="menu-btn" id="btnSettings">⚙ Settings</button>
+        </div>
+    </div>
+
+    <div id="settingsPanel">
+        <div class="settings-content">
+            <h2 class="settings-title">⚙ SETTINGS</h2>
+
+            <div class="settings-section">
+                <h3>🎯 Difficulty</h3>
+                <div class="difficulty-options">
+                    <button class="difficulty-btn" data-difficulty="easy">Easy</button>
+                    <button class="difficulty-btn active" data-difficulty="normal">Normal</button>
+                    <button class="difficulty-btn" data-difficulty="hard">Hard</button>
+                    <button class="difficulty-btn" data-difficulty="hardcore">Hardcore</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>🔊 Audio</h3>
+                <div class="audio-control">
+                    <label>🎵 Music</label>
+                    <input type="range" id="musicVolume" min="0" max="100" value="70">
+                    <span class="audio-value" id="musicValue">70%</span>
+                </div>
+                <div class="audio-control">
+                    <label>🔔 Effects</label>
+                    <input type="range" id="sfxVolume" min="0" max="100" value="80">
+                    <span class="audio-value" id="sfxValue">80%</span>
+                </div>
+                <div class="audio-control">
+                    <label>🔇 Master</label>
+                    <input type="range" id="masterVolume" min="0" max="100" value="100">
+                    <span class="audio-value" id="masterValue">100%</span>
+                </div>
+            </div>
+
+            <button class="back-btn" id="btnBack">← Back to Menu</button>
+        </div>
+    </div>
+
+    <div class="music-indicator">
+        <span class="music-note">♪</span>
+        <span id="musicStatus">Music playing</span>
+    </div>
+
+    <audio id="backgroundMusic" src="music/trackmenu.mp3" preload="auto" loop playsinline></audio>
+
+    <script>
+        const CONFIG = {
+            gameURL: 'phase1.html', // <--- MODIFICADO AQUÍ
+            loadingDuration: 4000
+        };
+
+        const gameState = {
+            difficulty: 'normal',
+            musicVolume: 0.7,
+            sfxVolume: 0.8,
+            masterVolume: 1.0,
+            isLoading: true
+        };
+
+        const loadingScreen = document.getElementById('loadingScreen');
+        const loadingBar = document.getElementById('loadingBar');
+        const loadingText = document.getElementById('loadingText');
+        const loadingPercentage = document.getElementById('loadingPercentage');
+        const mainMenu = document.getElementById('mainMenu');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        const musicStatus = document.getElementById('musicStatus');
+
+        const btnNewGame = document.getElementById('btnNewGame');
+        const btnSettings = document.getElementById('btnSettings');
+        const btnBack = document.getElementById('btnBack');
+
+        const musicVolumeSlider = document.getElementById('musicVolume');
+        const sfxVolumeSlider = document.getElementById('sfxVolume');
+        const masterVolumeSlider = document.getElementById('masterVolume');
+
+        const musicValue = document.getElementById('musicValue');
+        const sfxValue = document.getElementById('sfxValue');
+        const masterValue = document.getElementById('masterValue');
+
+        const difficultyBtns = document.querySelectorAll('.difficulty-btn');
+
+        const loadingMessages = [
+            'Loading resources...',
+            'Preparing the battlefield...',
+            'Recruiting soldiers...',
+            'Loading soundtrack...',
+            'Preparing the artillery...',
+            'Ready for battle!'
+        ];
+
+        const unlockEvents = ['pointerdown', 'click', 'keydown', 'touchstart'];
+        let musicUnlocked = false;
+
+        function applyMusicVolume() {
+            backgroundMusic.volume = Math.min(1, Math.max(0, gameState.musicVolume * gameState.masterVolume));
+        }
+
+        function setStatus(text) {
+            musicStatus.textContent = text;
+        }
+
+        function removeUnlockListeners() {
+            unlockEvents.forEach(evt => document.removeEventListener(evt, unlockMusic, true));
+        }
+
+        function unlockMusic() {
+            if (musicUnlocked) return;
+            applyMusicVolume();
+            backgroundMusic.muted = false;
+            const p = backgroundMusic.play();
+            const finish = () => {
+                musicUnlocked = true;
+                setStatus('Music playing');
+                removeUnlockListeners();
+            };
+            if (p !== undefined) {
+                p.then(finish).catch(() => {});
+            } else {
+                finish();
+            }
+        }
+
+        function addUnlockListeners() {
+            unlockEvents.forEach(evt => document.addEventListener(evt, unlockMusic, true));
+        }
+
+        function startMusic() {
+            applyMusicVolume();
+            backgroundMusic.muted = false;
+            const p = backgroundMusic.play();
+            if (p === undefined) {
+                musicUnlocked = true;
+                return;
+            }
+            p.then(() => {
+                musicUnlocked = true;
+                setStatus('Music playing');
+            }).catch(() => {
+                backgroundMusic.muted = true;
+                backgroundMusic.play().then(() => {
+                    setStatus('Click anywhere to enable sound');
+                    addUnlockListeners();
+                }).catch(() => {
+                    setStatus('Click anywhere to enable sound');
+                    addUnlockListeners();
+                });
+            });
+        }
+
+        function keepMusicAlive() {
+            if (backgroundMusic.paused && musicUnlocked && !gameState.leaving) {
+                backgroundMusic.play().catch(() => {});
+            }
+        }
+
+        backgroundMusic.addEventListener('pause', () => {
+            if (!document.hidden && !gameState.leaving && musicUnlocked) {
+                setTimeout(keepMusicAlive, 150);
+            }
+        });
+
+        backgroundMusic.addEventListener('stalled', keepMusicAlive);
+        backgroundMusic.addEventListener('waiting', () => {
+            setTimeout(() => {
+                if (backgroundMusic.readyState < 3) {
+                    const t = backgroundMusic.currentTime;
+                    backgroundMusic.load();
+                    backgroundMusic.currentTime = t;
+                    backgroundMusic.play().catch(() => {});
+                }
+            }, 3000);
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) keepMusicAlive();
+        });
+
+        window.addEventListener('focus', keepMusicAlive);
+
+        let progress = 0;
+        const loadingInterval = setInterval(() => {
+            progress += Math.random() * 12 + 3;
+            if (progress >= 100) {
+                progress = 100;
+                clearInterval(loadingInterval);
+
+                setTimeout(() => {
+                    loadingScreen.classList.add('hidden');
+                    mainMenu.style.display = 'flex';
+                    gameState.isLoading = false;
+                }, 500);
+            }
+
+            loadingBar.style.width = progress + '%';
+            loadingPercentage.textContent = Math.floor(progress) + '%';
+
+            const msgIndex = Math.min(
+                Math.floor((progress / 100) * loadingMessages.length),
+                loadingMessages.length - 1
+            );
+            loadingText.textContent = loadingMessages[msgIndex];
+        }, CONFIG.loadingDuration / 20);
+
+        function saveSettings() {
+            try {
+                localStorage.setItem('gameSettings', JSON.stringify({
+                    difficulty: gameState.difficulty,
+                    musicVolume: gameState.musicVolume,
+                    sfxVolume: gameState.sfxVolume,
+                    masterVolume: gameState.masterVolume
+                }));
+            } catch (e) {}
+        }
+
+        btnSettings.addEventListener('click', () => {
+            mainMenu.style.display = 'none';
+            settingsPanel.classList.add('visible');
+        });
+
+        btnBack.addEventListener('click', () => {
+            settingsPanel.classList.remove('visible');
+            mainMenu.style.display = 'flex';
+        });
+
+        btnNewGame.addEventListener('click', () => {
+            saveSettings();
+            gameState.leaving = true;
+
+            mainMenu.style.transition = 'opacity 0.5s ease';
+            mainMenu.style.opacity = '0';
+
+            backgroundMusic.pause();
+
+            setTimeout(() => {
+                window.location.href = CONFIG.gameURL;
+            }, 500);
+        });
+
+        difficultyBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                difficultyBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                gameState.difficulty = btn.dataset.difficulty;
+                saveSettings();
+            });
+        });
+
+        musicVolumeSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            gameState.musicVolume = val / 100;
+            musicValue.textContent = val + '%';
+            applyMusicVolume();
+            saveSettings();
+        });
+
+        sfxVolumeSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            gameState.sfxVolume = val / 100;
+            sfxValue.textContent = val + '%';
+            saveSettings();
+        });
+
+        masterVolumeSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            gameState.masterVolume = val / 100;
+            masterValue.textContent = val + '%';
+            applyMusicVolume();
+            saveSettings();
+        });
+
+        function loadSavedSettings() {
+            let saved = null;
+            try {
+                saved = localStorage.getItem('gameSettings');
+            } catch (e) {}
+            if (saved) {
+                try {
+                    const settings = JSON.parse(saved);
+
+                    if (settings.difficulty) {
+                        gameState.difficulty = settings.difficulty;
+                        difficultyBtns.forEach(btn => {
+                            btn.classList.toggle('active', btn.dataset.difficulty === settings.difficulty);
+                        });
+                    }
+
+                    if (settings.musicVolume !== undefined) {
+                        gameState.musicVolume = settings.musicVolume;
+                        musicVolumeSlider.value = Math.round(settings.musicVolume * 100);
+                        musicValue.textContent = Math.round(settings.musicVolume * 100) + '%';
+                    }
+
+                    if (settings.sfxVolume !== undefined) {
+                        gameState.sfxVolume = settings.sfxVolume;
+                        sfxVolumeSlider.value = Math.round(settings.sfxVolume * 100);
+                        sfxValue.textContent = Math.round(settings.sfxVolume * 100) + '%';
+                    }
+
+                    if (settings.masterVolume !== undefined) {
+                        gameState.masterVolume = settings.masterVolume;
+                        masterVolumeSlider.value = Math.round(settings.masterVolume * 100);
+                        masterValue.textContent = Math.round(settings.masterVolume * 100) + '%';
+                    }
+                } catch (e) {}
+            }
+            applyMusicVolume();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && settingsPanel.classList.contains('visible')) {
+                settingsPanel.classList.remove('visible');
+                mainMenu.style.display = 'flex';
+            }
+        });
+
+        loadSavedSettings();
+        startMusic();
+    </script>
+</body>
+</html>

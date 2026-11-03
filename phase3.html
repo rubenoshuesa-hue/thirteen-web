@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thirteen - Act 3: Lexington & Concord</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'VT323',monospace;color:#fff}
+#gameContainer{position:relative;width:100vw;height:100vh;display:flex;justify-content:center;align-items:center}
+canvas#gameCanvas{background:#111;image-rendering:pixelated;box-shadow:0 0 50px #000}
+#vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle,rgba(0,0,0,0) 50%,rgba(10,10,26,.85) 100%);box-shadow:inset 0 0 100px #000;z-index:10}
+#dialogueBox{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:90%;max-width:800px;height:160px;background:#000;border:4px solid #fff;border-radius:10px;padding:20px;display:none;z-index:20}
+#dialogueBox.active{display:flex;align-items:flex-start;gap:20px}
+#speakerPortrait{width:100px;height:100px;border:2px solid #555;background:#222;image-rendering:pixelated}
+#textContainer{flex:1;display:flex;flex-direction:column}
+#speakerName{font-size:24px;color:#f4c89a;margin-bottom:10px;text-transform:uppercase;letter-spacing:2px}
+#dialogueText{font-size:28px;line-height:1.1;color:#fff;white-space:pre-wrap}
+#dialogueText.nar{font-style:italic;color:#aaa}
+#continueIndicator{position:absolute;bottom:10px;right:20px;font-size:24px;animation:bounce .5s infinite alternate;display:none}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(5px)}}
+#interactionHUD{position:absolute;top:20px;right:20px;font-size:20px;background:#000;border:2px solid #fff;padding:10px;display:none;z-index:15}
+#musicHint{position:absolute;top:20px;left:20px;font-size:16px;color:#aaa;z-index:15}
+#hudHealth{position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:32px;color:#ff3333;text-shadow:2px 2px 0 #000;z-index:15;letter-spacing:5px;display:none}
+#damageOverlay{position:absolute;inset:0;background:rgba(255,0,0,.4);opacity:0;pointer-events:none;z-index:25;transition:opacity .1s}
+#fadeToBlack{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:40;transition:opacity 3s ease}
+#loadingNextPhase{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;color:#d4a574;text-align:center;display:none;z-index:50}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="vignette"></div>
+  <div id="hudHealth">HEALTH: ❤️❤️❤️</div>
+  <div id="interactionHUD">Press <b>E</b> to talk</div>
+  <div id="musicHint">Music: ON [M to toggle]</div>
+  <div id="dialogueBox">
+    <canvas id="speakerPortrait" width="64" height="64"></canvas>
+    <div id="textContainer"><div id="speakerName"></div><div id="dialogueText"></div></div>
+    <div id="continueIndicator">▼</div>
+  </div>
+  <div id="damageOverlay"></div>
+  <div id="fadeToBlack"></div>
+  <div id="loadingNextPhase"><h1>ACT 3: COMPLETE</h1><p>Loading Act 4...</p></div>
+</div>
+<audio id="bgMusic" src="music/track_act3.mp3" loop preload="auto"></audio>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('gameCanvas'),ctx=cv.getContext('2d');
+const VW=800,VH=600,MW=1800,MH=1200;
+function fit(){const s=Math.min(innerWidth/VW,innerHeight/VH);cv.style.width=VW*s+'px';cv.style.height=VH*s+'px'}
+addEventListener('resize',fit);fit();
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+const bgMusic=$('bgMusic');bgMusic.volume=.4;let audioOn=true;
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+const nb=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);{const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+function noise(dur,vol,fq,type='lowpass'){if(!audioOn||AC.state!=='running')return;const s=AC.createBufferSource();s.buffer=nb;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=fq;const g=AC.createGain(),n=AC.currentTime;g.gain.setValueAtTime(vol,n);g.gain.exponentialRampToValueAtTime(.001,n+dur);s.connect(f);f.connect(g);g.connect(AC.destination);s.start(n);s.stop(n+dur)}
+function sfx(k){if(!audioOn||AC.state!=='running')return;
+ if(k==='blip'){const o=AC.createOscillator(),g=AC.createGain(),n=AC.currentTime;o.type='square';o.frequency.value=380+Math.random()*80;g.gain.setValueAtTime(.04,n);g.gain.exponentialRampToValueAtTime(.001,n+.05);o.connect(g);g.connect(AC.destination);o.start(n);o.stop(n+.05)}
+ else if(k==='gunshot'){noise(.3,.4,800);noise(.2,.2,300)}
+ else if(k==='hurt'){const o=AC.createOscillator(),g=AC.createGain(),n=AC.currentTime;o.type='sawtooth';o.frequency.setValueAtTime(150,n);o.frequency.exponentialRampToValueAtTime(50,n+.3);g.gain.setValueAtTime(.3,n);g.gain.exponentialRampToValueAtTime(.001,n+.3);o.connect(g);g.connect(AC.destination);o.start(n);o.stop(n+.3)}
+}
+function wake(){AC.resume();if(audioOn&&bgMusic.paused)bgMusic.play().catch(()=>{})}
+addEventListener('click',wake);
+
+const SK='#f6eee2';
+const LOOK={
+ player:{skin:SK,hair:'#111',coat:'#2b63c9',deco:'rainbow',pants:'#1a1a1a'},
+ minuteman:{skin:SK,hair:'#5d4037',coat:'#8b4513',deco:'sash',pants:'#3b2f2f',hat:'fcap',hc:'#2c3e50'},
+ british:{skin:SK,hair:'#fff',coat:'#c0392b',deco:'captain',pants:'#ecf0f1',hat:'fcap',hc:'#111'},
+ child:{skin:SK,hair:'#c0561e',coat:'#e0b83a',deco:'plain',pants:'#3b5a90',scale:.68},
+ irish:{skin:SK,hair:'#b8501f',coat:'#6a4a2a',deco:'plain',pants:'#2a2a2a',hat:'fcap',hc:'#4a4a42'},
+ slave:{skin:'#74492b',hair:'#111',coat:'#a8946e',deco:'plain',pants:'#4a3c2c'}
+};
+
+function drawPerson(c,fx,fy,o,face,t,s,x){
+ c.save();c.translate(fx,fy);c.scale(s,s);
+ c.fillStyle='rgba(0,0,0,.35)';c.beginPath();c.ellipse(0,0,12,4,0,0,7);c.fill();
+ const side=face==='left'||face==='right',dr=face==='left'?-1:1,back=face==='up';
+ const m=x.moving,sw=m?Math.sin(t)*3:0;
+ const R=(a,b,w,h,col)=>{c.fillStyle='#111';c.fillRect(a-1.5,b-1.5,w+3,h+3);c.fillStyle=col;c.fillRect(a,b,w,h)};
+ const tw=side?12:18,cx=-tw/2;
+ if(!o.dress){const pc=o.pants||'#222';if(side){for(const k of[1,-1])R(-3+k*sw*1.2,-9,6,9,pc)}else{R(-7,-9+sw*.3,5,9-sw*.3,pc);R(2,-9-sw*.3,5,9+sw*.3,pc)}}
+ R(cx,-24,tw,15,o.coat);
+ if(!back){const d=o.deco;
+  if(d==='rainbow'&&!side){c.fillStyle='#2ecc71';c.fillRect(-3,-23,2,13);c.fillStyle='#f1c40f';c.fillRect(-1,-23,2,13);c.fillStyle='#e74c3c';c.fillRect(1,-23,2,13)}
+  else if(d==='sash'){c.strokeStyle='#fff';c.lineWidth=3;c.beginPath();c.moveTo(cx+1,-23);c.lineTo(-cx-1,-10);c.stroke()}
+  else if(d==='captain'){c.fillStyle='#f2c230';c.fillRect(cx+1,-23,2,13);c.fillRect(-cx-3,-23,2,13);if(!side){c.fillRect(-1,-20,2,2);c.fillRect(-1,-15,2,2)}}
+ }
+ const as=m?Math.sin(t)*2:0;
+ if(side)R(-2-sw,-23,4,10,o.coat);else{R(cx-5,-23+as,4,10,o.coat);R(-cx+1,-23-as,4,10,o.coat)}
+ const hy=-50,hw=side?26:28,hx0=-hw/2;
+ R(hx0,hy,hw,26,o.skin);
+ c.fillStyle=o.hair;
+ if(back)c.fillRect(hx0,hy,hw,24);
+ else if(side){c.fillRect(hx0,hy,hw,9);c.fillRect(dr>0?hx0:hx0+hw-13,hy+9,13,12)}
+ else{c.fillRect(hx0,hy,hw,9);c.fillRect(hx0,hy+9,5,9);c.fillRect(hx0+hw-5,hy+9,5,9)}
+ if(!back){
+  const xs=side?[dr*6]:[-6,6],ey=-38;
+  if(side)R(dr>0?12:-15,-37,3,4,o.skin);
+  for(const e0 of xs){ c.fillStyle='#111'; c.fillRect(e0-2,ey,4,5); }
+  c.fillStyle='#111'; c.fillRect(side?dr*7-2:-2,-30,4,1.5);
+ }
+ const h=o.hat,hc=o.hc;
+ if(h==='fcap'){R(-14,-57,28,9,hc);if(!back){c.fillStyle='rgba(0,0,0,.3)';c.fillRect(side?(dr>0?0:-16):-16,-50,side?16:32,3)}}
+ c.restore();
+}
+
+let E=[],P=[],Bullets=[],EBullets=[],time=0,camera={x:0,y:0},near=null;
+let gameState='explore',lives=3,invuln=0,kills=0,totalEnemies=5;
+let D=null,typeT=null;
+const box=$('dialogueBox'),nameEl=$('speakerName'),txt=$('dialogueText'),cont=$('continueIndicator'),por=$('speakerPortrait'),pC=por.getContext('2d');
+
+class Ent{
+ constructor(x,y,k,o={}){Object.assign(this,{x,y,k,o:LOOK[k],face:'down',t:Math.random()*6,moving:false,speed:1,tx:null,ty:null,talking:false,expr:'neutral',scale:1,dead:false},o)}
+ update(){
+  if(this.isPlayer||this.talking||this.dead||gameState!=='explore')return;
+  if(this.tx!=null){const dx=this.tx-this.x,dy=this.ty-this.y,d=Math.hypot(dx,dy);
+   if(d>2){this.x+=dx/d*this.speed;this.y+=dy/d*this.speed;this.moving=true;this.t+=.15;this.face=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up')}
+   else{this.tx=null;this.moving=false}
+  }else this.moving=false;
+ }
+ draw(c){drawPerson(c,this.x+24,this.y+48,this.o,this.face,this.t,this.scale||1,this)}
+}
+
+let player=new Ent(900,600,'player',{isPlayer:true,speed:3.2});
+E.push(player);
+
+function drawPort(Ln,open){pC.fillStyle='#1a2030';pC.fillRect(0,0,64,64);drawPerson(pC,32,96,Ln.look,'down',0,1.5,{ex:open?'open':(Ln.expr||'neutral')})}
+function say(lines){return new Promise(r=>{D={lines,i:0,r,typing:false,ready:false};showLine()})}
+function showLine(){const Ln=D.lines[D.i];if(Ln.act)Ln.act();
+ box.classList.add('active');cont.style.display='none';
+ if(Ln.sp){nameEl.textContent=Ln.sp;por.style.display='block';txt.className='';drawPort(Ln,false)}
+ else{nameEl.textContent='';por.style.display='none';txt.className='nar'}
+ txt.textContent='';let n=0;D.typing=true;D.ready=false;clearInterval(typeT);
+ typeT=setInterval(()=>{if(n<Ln.text.length){txt.textContent+=Ln.text[n];if(Ln.sp&&n%3===0)drawPort(Ln,(n/3|0)%2===0);if(n%2===0&&Ln.text[n]!==' ')sfx('blip');n++}else done()},28)}
+function done(){clearInterval(typeT);D.typing=false;D.ready=true;const Ln=D.lines[D.i];if(Ln.sp)drawPort(Ln,false);txt.textContent=Ln.text;cont.style.display='block';}
+function advance(){if(!D)return;if(D.typing)done();else if(D.ready)next()}
+function next(){D.i++;if(D.i>=D.lines.length){box.classList.remove('active');const r=D.r;D=null;r()}else showLine()}
+
+async function talk(n){
+ n.talking=true;
+ await say([{sp:n.k==='minuteman'?'Minuteman':'Townsfolk',look:n.o,text:n.line}]);
+ n.talking=false;
+ if(n.k==='minuteman'&&gameState==='explore'){
+  await say([{text:"April 19th, 1775. Lexington.\nThe British are advancing. Hold the line!"}]);
+  startCombat();
+ }
+}
+
+function startCombat(){
+ gameState='combat';
+ $('hudHealth').style.display='block';
+ E=E.filter(e=>e.isPlayer); 
+ E.push(player);
+ for(let i=0;i<totalEnemies;i++){
+  let e=new Ent(300+i*300, 200+Math.random()*100, 'british', {isEnemy:true, speed:1.2});
+  E.push(e);
+ }
+}
+
+function shoot(){
+ if(gameState!=='combat'||D)return;
+ let bx=player.x+24, by=player.y+24;
+ let target=E.find(e=>e.isEnemy&&!e.dead);
+ let vx=0,vy=-10;
+ if(target){ const dx=target.x+24-bx,dy=target.y+24-by,d=Math.hypot(dx,dy); vx=dx/d*12; vy=dy/d*12; }
+ Bullets.push({x:bx,y:by,vx,vy});
+ sfx('gunshot');
+}
+
+function takeDamage(){
+ if(invuln>0||gameState!=='combat')return;
+ lives--; invuln=100; sfx('hurt');
+ $('damageOverlay').style.opacity='1'; setTimeout(()=>$('damageOverlay').style.opacity='0',150);
+ if(lives===2) $('hudHealth').innerHTML='HEALTH: ❤️❤️🖤';
+ if(lives===1) $('hudHealth').innerHTML='HEALTH: ❤️🖤🖤';
+ if(lives<=0){
+  gameState='dead';
+  $('hudHealth').innerHTML='HEALTH: 🖤🖤🖤';
+  say([{text:"You have fallen in battle...\nRestarting Phase..."}]).then(()=>{
+   window.location.reload();
+  });
+ }
+}
+
+async function triggerVictory() {
+ gameState='won';
+ $('hudHealth').style.display='none';
+ $('interactionHUD').style.display='none';
+ E = E.filter(e => e.isPlayer);
+ Bullets = [];
+ EBullets = [];
+ 
+ await sleep(800);
+ await say([{text:"The British retreat.\n8 British soldiers die, but the Americans hold Concord.\nThe war has begun."}]);
+ $('fadeToBlack').style.opacity=1;
+ setTimeout(()=>$('loadingNextPhase').style.display='block',2000);
+ setTimeout(()=>window.location.href='phase4.html',3500);
+}
+
+function initGame(){
+ E.push(new Ent(800,500,'minuteman',{line:"Captain Parker awaits the Regulars on the green.\nStand your ground, lad. Don't fire unless fired upon."}));
+ E.push(new Ent(1100,600,'child',{line:"Mama told me to stay inside... but I wanted to see the soldiers!"}));
+ E.push(new Ent(500,550,'irish',{line:"Aye, trouble is brewing. The King's men are marching this way."}));
+ E.push(new Ent(600,300,'slave',{line:"They talk of liberty, but I am still in chains. Perhaps one day..."}));
+ setTimeout(()=>say([{text:"Lexington, Massachusetts. 1775.\nTalk to the Minuteman to prepare for the British arrival."}]),800);
+ if(audioOn)bgMusic.play().catch(()=>{});
+}
+
+const keys={};
+function frame(){
+ time=performance.now();
+ 
+ if(gameState === 'won') return;
+
+ if(!D && (gameState==='explore' || gameState==='combat')){
+  const ax=(keys.d||keys.ArrowRight?1:0)-(keys.a||keys.ArrowLeft?1:0),ay=(keys.s||keys.ArrowDown?1:0)-(keys.w||keys.ArrowUp?1:0);
+  if(ax||ay){const n=Math.hypot(ax,ay),vx=ax/n*player.speed,vy=ay/n*player.speed;
+   player.x+=vx;player.y+=vy;player.moving=true;player.t+=.26;player.face=Math.abs(ax)>=Math.abs(ay)&&ax?(ax>0?'right':'left'):(ay>0?'down':'up')}
+  else player.moving=false;
+  player.x=Math.max(0,Math.min(MW-48,player.x)); player.y=Math.max(0,Math.min(MH-48,player.y));
+ }
+
+ E.forEach(e=>e.update());
+ if(invuln>0)invuln--;
+
+ if(gameState==='combat' && !D){
+  E.forEach(e=>{
+   if(e.isEnemy&&!e.dead){
+    if(Math.random()<0.02){ let dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy); EBullets.push({x:e.x+24,y:e.y+24,vx:dx/d*4,vy:dy/d*4}); sfx('gunshot'); }
+   }
+  });
+ }
+
+ for(let i=Bullets.length-1;i>=0;i--){
+  let b=Bullets[i]; b.x+=b.vx; b.y+=b.vy;
+  let hit=false;
+  for(let e of E){ 
+    if(e.isEnemy && !e.dead && Math.hypot(b.x-(e.x+24),b.y-(e.y+24))<30){ 
+      e.dead=true; e.moving=false; hit=true; kills++; 
+      if(kills>=totalEnemies) {
+        triggerVictory();
+      }
+    } 
+  }
+  if(hit||b.x<0||b.x>MW||b.y<0||b.y>MH) Bullets.splice(i,1);
+ }
+ 
+ for(let i=EBullets.length-1;i>=0;i--){
+  let b=EBullets[i]; b.x+=b.vx; b.y+=b.vy;
+  if(Math.hypot(b.x-(player.x+24),b.y-(player.y+24))<25){ takeDamage(); EBullets.splice(i,1); }
+  else if(b.x<0||b.x>MW||b.y<0||b.y>MH) EBullets.splice(i,1);
+ }
+
+ camera.x+=(Math.max(0,Math.min(MW-VW,player.x+24-VW/2))-camera.x)*.1;
+ camera.y+=(Math.max(0,Math.min(MH-VH,player.y+24-VH/2))-camera.y)*.1;
+
+ near=null;if(!D&&gameState==='explore'){let bd=62;for(const e of E){if(e.isPlayer||e.dead)continue;const d=Math.hypot(player.x-e.x,player.y-e.y);if(d<bd){bd=d;near=e}}}
+ $('interactionHUD').style.display=near?'block':'none';
+
+ ctx.save();
+ ctx.fillStyle='#4a6a5a'; ctx.fillRect(0,0,VW,VH);
+ ctx.translate(-Math.round(camera.x),-Math.round(camera.y));
+
+ ctx.fillStyle='#3a503a'; ctx.fillRect(0,0,MW,MH);
+ ctx.fillStyle='#6b5d4a'; ctx.fillRect(0,650,MW,MH-650);
+
+ E.forEach(e=>e.draw(ctx));
+
+ for(const b of Bullets){ ctx.fillStyle='#f1c40f'; ctx.fillRect(b.x,b.y,6,6); }
+ for(const b of EBullets){ ctx.fillStyle='#ff3333'; ctx.fillRect(b.x,b.y,6,6); }
+
+ if(player.isPlayer && invuln%10<5){ if(!player.dead) player.draw(ctx); } else if(!player.dead) player.draw(ctx);
+
+ ctx.restore();
+ requestAnimationFrame(frame);
+}
+
+addEventListener('keydown',e=>{
+ wake();const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=true;
+ if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();
+ if(k===' '||k==='Enter'||k==='z'){ if(D) advance(); else if(gameState==='combat') shoot(); }
+ if(k==='e'){if(D)advance();else if(near)talk(near)}
+ if(k==='m'){audioOn=!audioOn;if(audioOn)bgMusic.play().catch(()=>{});else bgMusic.pause();$('musicHint').textContent=audioOn?'Music: ON [M to toggle]':'Music: OFF [M to toggle]'}
+});
+addEventListener('keyup',e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=false});
+
+initGame();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
