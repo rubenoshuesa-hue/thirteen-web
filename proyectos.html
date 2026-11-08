@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sitio web de Rubén - Proyectos</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-image: url('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSBPP_y5f42BnZRf77HTmR-vH3ClS2HNmhPyXTzUWwnQ&s=10');
+                color: bisque;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            nav {
+                background-color: black;
+                width: 100%;
+                padding: 1rem 0;
+                text-align: center;
+                border-bottom: 2px solid #38bdf8;
+            }
+            nav a {
+                color: bisque;
+                text-decoration: none;
+                margin: 0 15px;
+                font-weight: bold;
+            }
+            nav a:hover {
+                color: #38bdf8;
+            }
+            main {
+                max-width: 800px;
+                width: 90%;
+                margin: 2rem 0;
+            }
+            .card {
+                background-color: black;
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+                border: 1px solid #334155;
+            }
+            h1, h2 {
+                color: antiquewhite;
+            }
+            .tag {
+                background-color: #38bdf8;
+                color: black;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.8rem;
+                font-weight: bold;
+            }
+            .btn-github {
+                color: #38bdf8;
+                text-decoration: underline;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <nav>
+            <a href="index.html">Inicio</a>
+            <a href="biografia.html">Mi vida</a>
+            <a href="proyectos.html">Mis cositas</a>
+        </nav>
+
+        <main>
+            <h1>Mis Proyectos</h1>
+            
+            <section class="card">
+                <h2>Mi Sitio Web Personal <span class="tag">HTML / CSS</span></h2>
+                <p>Esta misma web alojada en GitHub Pages.</p>
+                <p>Mi repo de GitHub: <a class="btn-github" href="https://github.com/rubenoshuesa-hue/Lawebderuben.github.io/commits?author=rubenoshuesa-hue" target="_blank">Ver repositorio de Rubén</a></p>
+            </section>
+
+            <section class="card">
+                <h2>Snake en C <span class="tag">C</span></h2>
+                <p>El clásico juego de la serpiente desarrollado en C puro para terminal/sistema.</p>
+            </section>
+
+            <section class="card">
+                <h2>Pac-Man en C para terminales <span class="tag">C / LINUX</span></h2>
+                <p>El clásico videojuego de Pac-Man ahora jugable en tu terminal Linux, pensando en un posible port para BSD y macOS.</p>
+                <p><strong>Compilación:</strong> Con GCC, disponible en sistemas Linux.</p>
+                <p><strong>Versión:</strong> 0.1</p>
+            </section>
+
+            <section class="card">
+                <h2>App de cámara en Python <span class="tag">PYTHON</span></h2>
+                <p>Una cámara decente programada en Python, ideal para videovigilancia, seguridad o para testear cámaras en el sistema.</p>
+            </section>
+
+            <section class="card">
+                <h2>Juego web tipo space invaders ><span class="tag">JSCRIPT,HTML,CCS </span> </h2>
+                <p>recreacion del clasico de arcade,enlace: https://rubenoshuesa-hue.github.io/spacity/ </p>
+            </section>
+             
+            <section class="card"">
+             <h2>thirteen - an educational RPG <span class="tag">HTML </span></h2>
+             <p>un rpg hecho por vectorizacion a base de 7 simples actos,enlace:https://rubenoshuesa-hue.github.io/thirteen-web/ </p>
+        </main>
+    </body>
+</html>
